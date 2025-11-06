@@ -1,0 +1,135 @@
+<?xml version="1.0" encoding="utf-8"?>
+<androidx.cardview.widget.CardView xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:layout_marginBottom="12dp"
+    app:cardCornerRadius="8dp"
+    app:cardElevation="2dp">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:padding="16dp">
+
+        <!-- Body Part / Angle Name -->
+        <TextView
+            android:id="@+id/tvBodyPart"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Shoulder"
+            android:textSize="18sp"
+            android:textStyle="bold"
+            android:textColor="#333333"
+            android:layout_marginBottom="12dp" />
+
+        <!-- Statistics Grid -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical">
+
+            <!-- Mean Value -->
+            <LinearLayout
+                android:id="@+id/meanRow"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:layout_marginBottom="4dp">
+
+                <TextView
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:text="Average:"
+                    android:textSize="14sp"
+                    android:textColor="#4DD0E1" />
+
+                <TextView
+                    android:id="@+id/tvMeanValue"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="15.5 px"
+                    android:textSize="14sp"
+                    android:textStyle="bold"
+                    android:textColor="#4DD0E1" />
+            </LinearLayout>
+
+            <!-- Max Value -->
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:layout_marginBottom="4dp">
+
+                <TextView
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:text="Maximum:"
+                    android:textSize="14sp"
+                    android:textColor="#4DD0E1" />
+
+                <TextView
+                    android:id="@+id/tvMaxValue"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="25.2 px"
+                    android:textSize="14sp"
+                    android:textColor="#4DD0E1" />
+            </LinearLayout>
+
+            <!-- Min Value -->
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:layout_marginBottom="4dp">
+
+                <TextView
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:text="Minimum:"
+                    android:textSize="14sp"
+                    android:textColor="#4DD0E1" />
+
+                <TextView
+                    android:id="@+id/tvMinValue"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="8.3 px"
+                    android:textSize="14sp"
+                    android:textColor="#4DD0E1" />
+            </LinearLayout>
+
+            <!-- Standard Deviation -->
+            <LinearLayout
+                android:id="@+id/stdRow"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal">
+
+                <TextView
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:text="Std Deviation:"
+                    android:textSize="14sp"
+                    android:textColor="#4DD0E1" />
+
+                <TextView
+                    android:id="@+id/tvStdDev"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="3.2 px"
+                    android:textSize="14sp"
+                    android:textColor="#4DD0E1" />
+            </LinearLayout>
+
+        </LinearLayout>
+
+    </LinearLayout>
+
+</androidx.cardview.widget.CardView>
