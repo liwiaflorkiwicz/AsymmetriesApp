@@ -5,9 +5,7 @@ import android.graphics.Canvas
 import android.graphics.Color
 import android.graphics.Paint
 import android.util.AttributeSet
-import android.util.Log
 import android.view.View
-// ML Kit imports
 import com.google.mlkit.vision.pose.Pose
 import com.google.mlkit.vision.pose.PoseLandmark
 
@@ -17,12 +15,10 @@ class PoseOverlay @JvmOverloads constructor(
     defStyleAttr: Int = 0
 ) : View(context, attrs, defStyleAttr) {
 
-    private var mlPose: Pose? = null
-    private var tfPose: PoseDetectorTensorFlow.PoseNetPose? = null
+    private var pose: Pose? = null
     private var isFrontAnalysis: Boolean = true
     private var imageWidth: Int = 0
     private var imageHeight: Int = 0
-    private var useModel: String = "TensorFlow" // "MLKit" or "TensorFlow"
 
     private val pointPaint = Paint().apply {
         color = Color.GREEN
@@ -30,136 +26,105 @@ class PoseOverlay @JvmOverloads constructor(
         isAntiAlias = true
     }
 
-    // Update for ML Kit Pose
-    fun updatePose(
-        pose: Pose,
-        isFrontAnalysis: Boolean,
-        imageWidth: Int,
-        imageHeight: Int
-    ) {
-        this.mlPose = pose
-        this.tfPose = null
+    fun updatePose(pose: Pose, isFrontAnalysis: Boolean, imageWidth: Int, imageHeight: Int) {
+        this.pose = pose
         this.isFrontAnalysis = isFrontAnalysis
         this.imageWidth = imageWidth
         this.imageHeight = imageHeight
-        this.useModel = "MLKit"
-        invalidate()
-    }
-
-    // Update for TensorFlow Pose
-    fun updatePoseTF(
-        poseTF: PoseDetectorTensorFlow.PoseNetPose,
-        isFrontAnalysis: Boolean,
-        imageWidth: Int,
-        imageHeight: Int
-    ) {
-        this.tfPose = poseTF
-        this.mlPose = null
-        this.isFrontAnalysis = isFrontAnalysis
-        this.imageWidth = imageWidth
-        this.imageHeight = imageHeight
-        this.useModel = "TensorFlow"
         invalidate()
     }
 
     override fun onDraw(canvas: Canvas) {
         super.onDraw(canvas)
 
+        val currentPose = pose ?: return
         if (imageWidth == 0 || imageHeight == 0 || width == 0 || height == 0) return
 
+        // Calculate scaling factors
         val scaleX = width.toFloat() / imageWidth.toFloat()
         val scaleY = height.toFloat() / imageHeight.toFloat()
 
         canvas.save()
-        canvas.scale(-1f, 1f, width / 2f, height / 2f) // mirror for front camera
+        // Mirror the canvas for front-facing camera
+        canvas.scale(-1f, 1f, width / 2f, height / 2f)
 
-        when (useModel) {
-            "MLKit" -> mlPose?.let { drawMlKitPose(canvas, it, scaleX, scaleY) }
-            "TensorFlow" -> tfPose?.let { drawTfPose(canvas, it, scaleX, scaleY) }
+        if (isFrontAnalysis) {
+            drawFrontAnalysis(canvas, currentPose, scaleX, scaleY)
+        } else {
+            drawSideAnalysis(canvas, currentPose, scaleX, scaleY)
         }
     }
 
-    private fun drawMlKitPose(canvas: Canvas, pose: Pose, scaleX: Float, scaleY: Float) {
-        val landmarks = if (isFrontAnalysis) {
+    private fun drawFrontAnalysis(canvas: Canvas, pose: Pose, scaleX: Float, scaleY: Float) {
+        // Draw all visible keypoints
+        val landmarks = listOf(
+            PoseLandmark.LEFT_SHOULDER, PoseLandmark.RIGHT_SHOULDER,
+            PoseLandmark.LEFT_ELBOW, PoseLandmark.RIGHT_ELBOW,
+            PoseLandmark.LEFT_WRIST, PoseLandmark.RIGHT_WRIST,
+            PoseLandmark.LEFT_HIP, PoseLandmark.RIGHT_HIP,
+            PoseLandmark.LEFT_KNEE, PoseLandmark.RIGHT_KNEE,
+            PoseLandmark.LEFT_ANKLE, PoseLandmark.RIGHT_ANKLE,
+            PoseLandmark.LEFT_EAR, PoseLandmark.RIGHT_EAR
+        )
+
+        // Draw keypoints
+        landmarks.forEach { landmarkType ->
+            val landmark = pose.getPoseLandmark(landmarkType)
+            if (landmark != null && isVisible(landmark)) {
+                canvas.drawCircle(
+                    landmark.position.x * scaleX,
+                    landmark.position.y * scaleY,
+                    10f,
+                    pointPaint
+                )
+            }
+        }
+    }
+
+    private fun drawSideAnalysis(canvas: Canvas, pose: Pose, scaleX: Float, scaleY: Float) {
+        // Determine which side is visible
+        val leftHip = pose.getPoseLandmark(PoseLandmark.LEFT_HIP)
+        val leftKnee = pose.getPoseLandmark(PoseLandmark.LEFT_KNEE)
+        val rightHip = pose.getPoseLandmark(PoseLandmark.RIGHT_HIP)
+        val rightKnee = pose.getPoseLandmark(PoseLandmark.RIGHT_KNEE)
+
+        val isLeftSide = leftHip != null && leftKnee != null &&
+                isVisible(leftHip) && isVisible(leftKnee)
+        val isRightSide = rightHip != null && rightKnee != null &&
+                isVisible(rightHip) && isVisible(rightKnee)
+
+        // Choose which side to draw
+        val landmarks = if (isLeftSide) {
             listOf(
-                PoseLandmark.LEFT_SHOULDER, PoseLandmark.RIGHT_SHOULDER,
-                PoseLandmark.LEFT_ELBOW, PoseLandmark.RIGHT_ELBOW,
-                PoseLandmark.LEFT_WRIST, PoseLandmark.RIGHT_WRIST,
-                PoseLandmark.LEFT_HIP, PoseLandmark.RIGHT_HIP,
-                PoseLandmark.LEFT_KNEE, PoseLandmark.RIGHT_KNEE,
-                PoseLandmark.LEFT_ANKLE, PoseLandmark.RIGHT_ANKLE,
-                PoseLandmark.LEFT_EAR, PoseLandmark.RIGHT_EAR
-            )
-        } else {
-            // side analysis
-            val leftVisible = isVisible(pose.getPoseLandmark(PoseLandmark.LEFT_HIP)) &&
-                    isVisible(pose.getPoseLandmark(PoseLandmark.LEFT_KNEE))
-            val rightVisible = isVisible(pose.getPoseLandmark(PoseLandmark.RIGHT_HIP)) &&
-                    isVisible(pose.getPoseLandmark(PoseLandmark.RIGHT_KNEE))
-            if (leftVisible) listOf(
                 PoseLandmark.LEFT_SHOULDER, PoseLandmark.LEFT_ELBOW, PoseLandmark.LEFT_WRIST,
                 PoseLandmark.LEFT_HIP, PoseLandmark.LEFT_KNEE, PoseLandmark.LEFT_ANKLE,
                 PoseLandmark.LEFT_EAR
-            ) else if (rightVisible) listOf(
+            )
+        } else if (isRightSide) {
+            listOf(
                 PoseLandmark.RIGHT_SHOULDER, PoseLandmark.RIGHT_ELBOW, PoseLandmark.RIGHT_WRIST,
                 PoseLandmark.RIGHT_HIP, PoseLandmark.RIGHT_KNEE, PoseLandmark.RIGHT_ANKLE,
                 PoseLandmark.RIGHT_EAR
-            ) else emptyList()
-        }
-
-        landmarks.forEach { landmarkType ->
-            pose.getPoseLandmark(landmarkType)?.let {
-                if (isVisible(it)) {
-                    canvas.drawCircle(it.position.x * scaleX, it.position.y * scaleY, 10f, pointPaint)
-                }
-            }
-        }
-    }
-
-    private fun drawTfPose(canvas: Canvas, pose: PoseDetectorTensorFlow.PoseNetPose, scaleX: Float, scaleY: Float) {
-        Log.v("drawTfPose", "Drawing pose with ${pose.keypoints.size} keypoints, scaleX=$scaleX, scaleY=$scaleY")
-
-        val keypointsToDraw = if (isFrontAnalysis) {
-            listOf(
-                "leftShoulder", "rightShoulder",
-                "leftElbow", "rightElbow",
-                "leftWrist", "rightWrist",
-                "leftHip", "rightHip",
-                "leftKnee", "rightKnee",
-                "leftAnkle", "rightAnkle",
-                "leftEar", "rightEar"
             )
         } else {
-            val leftVisible = (pose.keypoints["leftHip"]?.score ?: 0f) > 0.5f &&
-                    (pose.keypoints["leftKnee"]?.score ?: 0f) > 0.5f
-            val rightVisible = (pose.keypoints["rightHip"]?.score ?: 0f) > 0.5f &&
-                    (pose.keypoints["rightKnee"]?.score ?: 0f) > 0.5f
-            when {
-                leftVisible -> listOf("leftShoulder", "leftElbow", "leftWrist", "leftHip", "leftKnee", "leftAnkle", "leftEar")
-                rightVisible -> listOf("rightShoulder", "rightElbow", "rightWrist", "rightHip", "rightKnee", "rightAnkle", "rightEar")
-                else -> {
-                    Log.w("drawTfPose", "No visible side detected!")
-                    emptyList()
-                }
-            }
+            emptyList()
         }
 
-        keypointsToDraw.forEach { name ->
-            val kp = pose.keypoints[name]
-            if (kp == null) {
-                Log.w("drawTfPose", "Keypoint $name not found in map")
-                return@forEach
-            }
-            if (kp.score > 0.5f) {
-                canvas.drawCircle(kp.x * scaleX, kp.y * scaleY, 10f, pointPaint)
-            } else {
-                Log.v("drawTfPose", "Keypoint $name score too low (${kp.score})")
+        // Draw keypoints
+        landmarks.forEach { landmarkType ->
+            val landmark = pose.getPoseLandmark(landmarkType)
+            if (landmark != null && isVisible(landmark)) {
+                canvas.drawCircle(
+                    landmark.position.x * scaleX,
+                    landmark.position.y * scaleY,
+                    10f,
+                    pointPaint
+                )
             }
         }
     }
 
-
-    private fun isVisible(landmark: PoseLandmark?): Boolean {
-        return (landmark?.inFrameLikelihood ?: 0f) > 0.7f
+    private fun isVisible(landmark: PoseLandmark): Boolean {
+        return landmark.inFrameLikelihood > 0.7f
     }
 }

@@ -18,28 +18,29 @@ class PoseDetectorMLKit {
         .build()
 
     private val poseDetector = PoseDetection.getClient(options)
-    var csvWriter: FileWriter? = null
-    var isRecording = false
-    var exerciseType: String = "POSE"
-    private var latestPose: Pose? = null
+    private var csvWriter: FileWriter? = null
+    private var isRecording = false
+    private var currentPose: Pose? = null
+    private var exerciseType: String = "POSE"
 
     private fun isFrontAnalysis() = exerciseType in listOf("POSE", "SQUAT", "HAND_RISE")
     private fun isSideAnalysis() = exerciseType in listOf("SIDE_SQUAT", "PLANK")
 
-    val asymmetryPairs = listOf(
+    private val asymmetryPairs = listOf(
         Pair(PoseLandmark.LEFT_SHOULDER, PoseLandmark.RIGHT_SHOULDER) to "shoulder",
         Pair(PoseLandmark.LEFT_HIP, PoseLandmark.RIGHT_HIP) to "hip",
         Pair(PoseLandmark.LEFT_KNEE, PoseLandmark.RIGHT_KNEE) to "knee",
         Pair(PoseLandmark.LEFT_ANKLE, PoseLandmark.RIGHT_ANKLE) to "ankle",
         Pair(PoseLandmark.LEFT_ELBOW, PoseLandmark.RIGHT_ELBOW) to "elbow",
         Pair(PoseLandmark.LEFT_WRIST, PoseLandmark.RIGHT_WRIST) to "wrist",
+
         Pair(PoseLandmark.LEFT_EAR, PoseLandmark.RIGHT_EAR) to "ear"
     )
 
     /**
      * Get the current detected pose
      */
-    fun getCurrentPoseMLKit(): Pose? = latestPose
+    fun getCurrentPose(): Pose? = currentPose
 
     /**
      * Check if pose is visible - requires at least one ear, wrist, and foot
@@ -77,11 +78,9 @@ class PoseDetectorMLKit {
 
         poseDetector.process(image)
             .addOnSuccessListener { pose ->
-                latestPose = pose
                 Log.d("PoseDetector", "detectPose: Pose detection successful")
                 if (isRecording) {
                     saveKeypointsToCSV(pose)
-
                 }
                 onSuccess(pose)
             }
@@ -89,6 +88,40 @@ class PoseDetectorMLKit {
                 Log.e("PoseDetector", "detectPose: Pose detection failed - ${e.message}")
                 onFailure(e)
             }
+    }
+
+    /**
+     * Start saving keypoints to a CSV file
+     */
+    fun startSavingKeypoints(filename: File, exerciseType: String) {
+        try {
+            this.exerciseType = exerciseType
+            csvWriter = FileWriter(filename, false)
+            isRecording = true
+
+            val header = buildString {
+                append("timestamp,exercise_type,")
+
+                // ALL asymmetry columns (always present)
+                asymmetryPairs.forEach { (_, name) ->
+                    append("${name}_height_diff,")
+                }
+
+                // ALL angle columns (always present)
+                append("squat_angle,plank_angle,")
+
+                // Coordinate columns for ALL exercises
+                asymmetryPairs.forEach { (_, name) ->
+                    append("left_${name}_x,left_${name}_y,right_${name}_x,right_${name}_y,")
+                }
+                append("\n")
+            }
+            csvWriter?.write(header)
+            csvWriter?.flush()
+        } catch (e: Exception) {
+            Log.e("PoseDetector", "startSavingKeypoints: Failed to start saving keypoints - ${e.message}")
+            isRecording = false
+        }
     }
 
     /**
