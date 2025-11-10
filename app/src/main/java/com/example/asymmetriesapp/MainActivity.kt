@@ -5,7 +5,9 @@ import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
 import android.content.pm.PackageManager
 import android.Manifest
+import android.R
 import android.content.Intent
+import android.graphics.Color
 import android.util.Log
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.camera.core.CameraSelector
@@ -64,6 +66,7 @@ class MainActivity : AppCompatActivity() {
             viewBinding = ActivityMainBinding.inflate(layoutInflater)
             setContentView(viewBinding.root)
             viewBinding.textView?.bringToFront()
+            viewBinding.btnStartAnalysis?.bringToFront()
 
             cameraExecutor = Executors.newSingleThreadExecutor()
             // ML Kit Pose Detector
@@ -73,6 +76,7 @@ class MainActivity : AppCompatActivity() {
             if (allPermissionsGranted()) {
                 startCameraWithAnalysis()
                 setupAnalysisButton()
+                resetToIdle()
             } else {
                 requestPermissions()
             }
@@ -127,6 +131,8 @@ class MainActivity : AppCompatActivity() {
         currentState = RecordingState.COUNTDOWN
         updateButtonUI("Cancel")
 
+        var isPoseVisibleInLastCheck = false
+
         countdownJob = lifecycleScope.launch {
             for (i in 10 downTo 1) {
                 if (!isActive) break
@@ -134,30 +140,38 @@ class MainActivity : AppCompatActivity() {
                 val currentPose = poseDetectorMLKit.getCurrentPose()     // get latest pose PoseDetector
                 val isPoseValid = currentPose != null && poseDetectorMLKit.isPoseVisible(currentPose)
 
+                isPoseVisibleInLastCheck = isPoseValid
+
                 runOnUiThread {
                     if (isPoseValid) {
                         viewBinding.textView?.text = "Body detected - $i"
-                        viewBinding.textView?.setTextColor(getColor(android.R.color.holo_green_dark))
+                        viewBinding.textView?.setTextColor(getColor(R.color.holo_green_dark))
                     } else {
                         viewBinding.textView?.text = "Position yourself - $i\nShow full body"
-                        viewBinding.textView?.setTextColor(getColor(android.R.color.holo_orange_dark))
-                        cancelCountdown()
-                    }
-
-                    if (i == 1 && !isPoseValid) {
-                        cancelCountdown()
+                        viewBinding.textView?.setTextColor(getColor(R.color.holo_orange_dark))
                     }
                 }
-
                 delay(1000)
             }
+
+            // After countdown
 
             // Clear status message
             runOnUiThread {
                 viewBinding.textView?.text = ""
             }
             if (isActive) {
-                startRecording()
+                if (isPoseVisibleInLastCheck) {
+                    // If pose was correct at the end of countdown
+                    startRecording()
+                } else {
+                    // If pose was never correct
+                    runOnUiThread {
+                        viewBinding.textView?.text = "Couldn't detect pose during countdown. Try again."
+                        viewBinding.textView?.setTextColor(getColor(R.color.holo_red_dark))
+                    }
+                    resetToIdle()
+                }
             }
         }
     }
@@ -180,6 +194,19 @@ class MainActivity : AppCompatActivity() {
 
             recordingJob = lifecycleScope.launch {
                 while (remainingTime > 0 && isActive) {
+
+                    val currentPose = poseDetectorMLKit.getCurrentPose()
+                    val isPoseValid = currentPose != null && poseDetectorMLKit.isPoseVisible(currentPose)
+
+                    if (!isPoseValid) {
+                        runOnUiThread {
+                            viewBinding.textView?.text = "Lost sight of user! Stopping recording..."
+                            viewBinding.textView?.setTextColor(getColor(R.color.holo_red_dark))
+                        }
+                        delay(2000)
+                        completeRecording(file)
+                        return@launch
+                    }
                     updateButtonUI("Stop ($remainingTime s)")
                     delay(1000)
                     remainingTime--
@@ -257,7 +284,7 @@ class MainActivity : AppCompatActivity() {
                 lifecycleScope.launch {
                     try {
                         // Analyze the data
-                        val reportPath = poseDetectorMLKit.analyzeRecordedData(file, exerciseType)
+                        val reportPath = poseDetectorMLKit.analyzeRecordedData(file)
 
                         // Navigate to results
                         val intent = Intent(this@MainActivity, ReportGenerator::class.java).apply {
@@ -306,15 +333,15 @@ class MainActivity : AppCompatActivity() {
             viewBinding.btnStartAnalysis?.text = text
 
             // Set background color based on state
-            val colorResId = when (currentState) {
-                RecordingState.IDLE -> android.R.color.holo_green_dark
-                RecordingState.COUNTDOWN -> android.R.color.holo_orange_dark
-                RecordingState.RECORDING -> android.R.color.holo_blue_dark
-                RecordingState.READY_FOR_RESULTS -> android.R.color.holo_green_light
+            val colorValue: Int = when (currentState) {
+                RecordingState.IDLE -> Color.parseColor("#99B7F5")
+                RecordingState.COUNTDOWN -> ContextCompat.getColor(this, R.color.holo_orange_dark)
+                RecordingState.RECORDING -> ContextCompat.getColor(this, R.color.holo_blue_dark)
+                RecordingState.READY_FOR_RESULTS -> ContextCompat.getColor(this, R.color.holo_green_light)
             }
 
             viewBinding.btnStartAnalysis?.backgroundTintList =
-                ContextCompat.getColorStateList(this, colorResId)
+                android.content.res.ColorStateList.valueOf(colorValue)
         }
     }
 

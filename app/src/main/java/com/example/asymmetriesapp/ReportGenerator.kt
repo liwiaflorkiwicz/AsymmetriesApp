@@ -310,7 +310,7 @@ class ReportGenerator : AppCompatActivity() {
             val isSideAnalysis = exerciseType in listOf("SIDE_SQUAT", "PLANK")
 
             return if (isFrontAnalysis) {
-                analyzeAsymmetryData(header, dataLines, exerciseType)
+                analyzeAsymmetryData(header, dataLines)
             } else if (isSideAnalysis) {
                 analyzeAngleData(header, dataLines, exerciseType)
             } else {
@@ -318,7 +318,7 @@ class ReportGenerator : AppCompatActivity() {
             }
         }
 
-        private fun analyzeAsymmetryData(header: List<String>, dataLines: List<String>, exerciseType: String): AnalysisResult {
+        private fun analyzeAsymmetryData(header: List<String>, dataLines: List<String>): AnalysisResult {
             val bodyParts = listOf("shoulder", "hip", "knee", "ankle", "elbow", "ear")
             val asymmetryStats = mutableMapOf<String, AsymmetryStats>()
 
@@ -356,7 +356,6 @@ class ReportGenerator : AppCompatActivity() {
                     }
                 }
             }
-
             return AnalysisResult.AsymmetryResult(asymmetryStats)
         }
 

@@ -33,7 +33,6 @@ class PoseDetectorMLKit {
         Pair(PoseLandmark.LEFT_ANKLE, PoseLandmark.RIGHT_ANKLE) to "ankle",
         Pair(PoseLandmark.LEFT_ELBOW, PoseLandmark.RIGHT_ELBOW) to "elbow",
         Pair(PoseLandmark.LEFT_WRIST, PoseLandmark.RIGHT_WRIST) to "wrist",
-
         Pair(PoseLandmark.LEFT_EAR, PoseLandmark.RIGHT_EAR) to "ear"
     )
 
@@ -42,6 +41,7 @@ class PoseDetectorMLKit {
      */
     fun getCurrentPose(): Pose? = currentPose
 
+    // POSE DETECTION
     /**
      * Check if pose is visible - requires at least one ear, wrist, and foot
      * This is used during the countdown phase to verify proper body positioning
@@ -66,6 +66,7 @@ class PoseDetectorMLKit {
         return isVisible
     }
 
+    // POSE DETECTION
     /**
      * Detect pose in the given image and handle success/failure via callbacks
      */
@@ -79,6 +80,8 @@ class PoseDetectorMLKit {
         poseDetector.process(image)
             .addOnSuccessListener { pose ->
                 Log.d("PoseDetector", "detectPose: Pose detection successful")
+                this.currentPose = pose
+
                 if (isRecording) {
                     saveKeypointsToCSV(pose)
                 }
@@ -240,9 +243,11 @@ class PoseDetectorMLKit {
     /**
      * Analyze recorded data and trigger completion callback
      */
-    fun analyzeRecordedData(file: File, exerciseType: String): String {
+    fun analyzeRecordedData(file: File): String {
         return file.absolutePath
     }
+
+
 
     /**
      * Calculate 3-point angle (like in AsymmetryAnalyzer)
@@ -277,7 +282,7 @@ class PoseDetectorMLKit {
      * Check if a landmark is visible (has good confidence)
      */
     private fun isLandmarkVisible(landmark: PoseLandmark?): Boolean {
-        return landmark != null && landmark.inFrameLikelihood > 0.5f
+        return landmark != null && landmark.inFrameLikelihood > 0.7f
     }
 
     /**
