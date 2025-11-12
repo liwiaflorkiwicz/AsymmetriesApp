@@ -94,7 +94,7 @@
                         android:id="@+id/tvOutputFeedback"
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
-                        android:text="output score and feedback message here"
+                        android:text="Your exercise shows good symmetry."
                         android:textSize="14sp"
                         android:textColor="#666666"
                         android:lineSpacingExtra="4dp" />

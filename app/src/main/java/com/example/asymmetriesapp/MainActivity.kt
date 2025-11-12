@@ -22,6 +22,7 @@ import com.example.asymmetriesapp.databinding.ActivityMainBinding
 import com.google.common.util.concurrent.ListenableFuture
 // mlkit imports
 import com.google.mlkit.vision.common.InputImage
+import com.google.mlkit.vision.pose.Pose
 
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -132,6 +133,7 @@ class MainActivity : AppCompatActivity() {
         updateButtonUI("Cancel")
 
         var isPoseVisibleInLastCheck = false
+        var poseForScale: Pose? = null
 
         countdownJob = lifecycleScope.launch {
             for (i in 10 downTo 1) {
@@ -144,6 +146,7 @@ class MainActivity : AppCompatActivity() {
 
                 runOnUiThread {
                     if (isPoseValid) {
+                        poseForScale = currentPose
                         viewBinding.textView?.text = "Body detected - $i"
                         viewBinding.textView?.setTextColor(getColor(R.color.holo_green_dark))
                     } else {
@@ -155,7 +158,6 @@ class MainActivity : AppCompatActivity() {
             }
 
             // After countdown
-
             // Clear status message
             runOnUiThread {
                 viewBinding.textView?.text = ""
@@ -163,6 +165,10 @@ class MainActivity : AppCompatActivity() {
             if (isActive) {
                 if (isPoseVisibleInLastCheck) {
                     // If pose was correct at the end of countdown
+                    if (poseForScale != null && isFrontAnalysis) {
+                        poseDetectorMLKit.calculateScale(poseForScale!!)
+                        Log.d(TAG, "Normalization Scale Set before recording.")
+                    }
                     startRecording()
                 } else {
                     // If pose was never correct
@@ -207,7 +213,9 @@ class MainActivity : AppCompatActivity() {
                         completeRecording(file)
                         return@launch
                     }
+                    viewBinding.textView?.text = "$remainingTime s remaining"
                     updateButtonUI("Stop ($remainingTime s)")
+                    viewBinding.textView?.setTextColor(getColor(R.color.holo_blue_bright))
                     delay(1000)
                     remainingTime--
                 }

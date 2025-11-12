@@ -142,21 +142,21 @@ class ReportGenerator : AppCompatActivity() {
             bodyPart.replaceFirstChar { it.uppercase() }
 
         cardView.findViewById<TextView>(R.id.tvMeanValue).text =
-            "Average: %.2f px".format(stats.meanDiff)
+            getString(R.string.avg_asym).format(stats.meanDiff)
 
         cardView.findViewById<TextView>(R.id.tvMaxValue).text =
-            "Max: %.2f px".format(stats.maxDiff)
+            getString(R.string.max_asym).format(stats.maxDiff)
 
         cardView.findViewById<TextView>(R.id.tvMinValue).text =
-            "Min: %.2f px".format(stats.minDiff)
+            getString(R.string.min_asym).format(stats.minDiff)
 
         cardView.findViewById<TextView>(R.id.tvStdDev).text =
-            "Std Dev: %.2f px".format(stats.stdDev)
+            getString(R.string.std_asym).format(stats.stdDev)
 
         // Color code based on severity
         val severityColor = when {
-            stats.meanDiff < 8 -> "#4CAF50" // Green - Good
-            stats.meanDiff < 16 -> "#FFC107" // Yellow - Moderate
+            stats.meanDiff < 5 -> "#4CAF50" // Green - Good
+            stats.meanDiff < 10 -> "#FFC107" // Yellow - Moderate
             else -> "#F44336" // Red - High
         }
         cardView.findViewById<TextView>(R.id.tvBodyPart).setTextColor(
@@ -217,8 +217,6 @@ class ReportGenerator : AppCompatActivity() {
         maxAsymmetry: AsymmetryStats?
     ): String {
 
-        // INSERT OUTPUT FROM MODEL - ASYMMETRY_SCORE + CORRECTNESS_SCORE + RECOMMENDATIONS
-
         if (maxAsymmetry == null || stats.isEmpty()) {
             return "No significant asymmetries detected. Good job!"
         }
@@ -230,7 +228,7 @@ class ReportGenerator : AppCompatActivity() {
                 avgAsymmetry < 5 -> {
                     append("Excellent! Your body shows good overall symmetry with minimal imbalances. ")
                 }
-                avgAsymmetry < 15 -> {
+                avgAsymmetry < 10 -> {
                     append("Good work! Some minor asymmetries detected, which is normal. ")
                 }
                 else -> {
@@ -239,7 +237,7 @@ class ReportGenerator : AppCompatActivity() {
             }
 
             append("\n\nHighest asymmetry: ${maxAsymmetry.bodyPart} ")
-            append("(${String.format("%.1f", maxAsymmetry.meanDiff)} px average difference)")
+            append("(${String.format("%.1f", maxAsymmetry.meanDiff)} % average difference)")
         }
     }
 
@@ -247,8 +245,6 @@ class ReportGenerator : AppCompatActivity() {
         if (stats.isEmpty()) {
             return "No angle data available."
         }
-
-        // INSERT OUTPUT FROM MODEL - ASYMMETRY_SCORE + CORRECTNESS_SCORE + RECOMMENDATIONS
 
         return buildString {
             stats.forEach { (angleType, angleStats) ->
