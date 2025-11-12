@@ -158,7 +158,6 @@ class MainActivity : AppCompatActivity() {
             }
 
             // After countdown
-            // Clear status message
             runOnUiThread {
                 viewBinding.textView?.text = ""
             }
@@ -245,7 +244,7 @@ class MainActivity : AppCompatActivity() {
             viewBinding.textView?.setTextColor(getColor(android.R.color.holo_green_dark))
         }
 
-        // save to database (also include video path)
+        // save to database
         val analysisResult = csvFile?.let { ReportGenerator.parseCSVData(it, exerciseType) }
 
         val avgAsymmetry = if (analysisResult is AnalysisResult.AsymmetryResult) {
