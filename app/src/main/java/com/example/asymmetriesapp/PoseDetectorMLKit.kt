@@ -22,6 +22,7 @@ class PoseDetectorMLKit {
     private var isRecording = false
     private var currentPose: Pose? = null
     private var exerciseType: String = "POSE"
+    private var normalizationScale: Float = 1.0f
 
     private fun isFrontAnalysis() = exerciseType in listOf("POSE", "SQUAT", "HAND_RISE")
     private fun isSideAnalysis() = exerciseType in listOf("SIDE_SQUAT", "PLANK")
@@ -145,7 +146,8 @@ class PoseDetectorMLKit {
                         if (leftLandmark != null && rightLandmark != null &&
                             isLandmarkVisible(leftLandmark) && isLandmarkVisible(rightLandmark)) {
                             val heightDiff = abs(leftLandmark.position.y - rightLandmark.position.y)
-                            append("$heightDiff,")
+                            val heightDiffPercent = heightDiff / normalizationScale * 100.0f
+                            append("$heightDiffPercent,")
                         } else {
                             append("NaN,")
                         }
@@ -247,7 +249,35 @@ class PoseDetectorMLKit {
         return file.absolutePath
     }
 
+    fun calculateScale(pose: Pose): Float {
+        val leftHip = pose.getPoseLandmark(PoseLandmark.LEFT_HIP)
+        val rightHip = pose.getPoseLandmark(PoseLandmark.RIGHT_HIP)
+        val leftShoulder = pose.getPoseLandmark(PoseLandmark.LEFT_SHOULDER)
+        val rightShoulder = pose.getPoseLandmark(PoseLandmark.RIGHT_SHOULDER)
 
+        if (!areAllVisible(leftHip, rightHip, leftShoulder, rightShoulder)) {
+            this.normalizationScale = 1.0f
+            return 1.0f
+        }
+
+        val midHipX = (leftHip!!.position.x + rightHip!!.position.x) / 2
+        val midHipY = (leftHip.position.y + rightHip.position.y) / 2
+        val midShoulderX = (leftShoulder!!.position.x + rightShoulder!!.position.x) / 2
+        val midShoulderY = (leftShoulder.position.y + rightShoulder.position.y) / 2
+
+        val dx = midShoulderX - midHipX
+        val dy = midShoulderY - midHipY
+        val scale = sqrt((dx * dx + dy * dy).toDouble()).toFloat()
+
+        if (scale > 10.0f) { // arbitrary minimum to avoid division by zero
+            this.normalizationScale = scale
+            Log.d("PoseDetectorMLKit", "Normalization Scale calculated: $scale pixels")
+            return scale
+        } else {
+            this.normalizationScale = 1.0f
+            return 1.0f
+        }
+    }
 
     /**
      * Calculate 3-point angle (like in AsymmetryAnalyzer)
