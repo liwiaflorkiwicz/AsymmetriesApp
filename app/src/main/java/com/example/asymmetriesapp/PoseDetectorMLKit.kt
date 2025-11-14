@@ -6,6 +6,7 @@ import com.google.mlkit.vision.pose.Pose
 import com.google.mlkit.vision.pose.PoseDetection
 import com.google.mlkit.vision.pose.PoseLandmark
 import com.google.mlkit.vision.pose.defaults.PoseDetectorOptions
+
 import java.io.File
 import java.io.FileWriter
 import kotlin.math.abs
@@ -42,7 +43,6 @@ class PoseDetectorMLKit {
      */
     fun getCurrentPose(): Pose? = currentPose
 
-    // POSE DETECTION
     /**
      * Check if pose is visible - requires at least one ear, wrist, and foot
      * This is used during the countdown phase to verify proper body positioning
@@ -327,6 +327,5 @@ class PoseDetectorMLKit {
         csvWriter?.close()
         stopSavingKeypoints()
     }
-
 }
 

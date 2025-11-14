@@ -8,6 +8,7 @@ import android.util.AttributeSet
 import android.view.View
 import com.google.mlkit.vision.pose.Pose
 import com.google.mlkit.vision.pose.PoseLandmark
+import com.google.mediapipe.formats.proto.LandmarkProto
 
 class PoseOverlay @JvmOverloads constructor(
     context: Context,
@@ -15,7 +16,11 @@ class PoseOverlay @JvmOverloads constructor(
     defStyleAttr: Int = 0
 ) : View(context, attrs, defStyleAttr) {
 
-    private var pose: Pose? = null
+    // ML Kit
+    private var poseML: Pose? = null
+    // MediaPipe
+    private var poseMP: List<LandmarkProto.NormalizedLandmark>? = null
+
     private var isFrontAnalysis: Boolean = true
     private var imageWidth: Int = 0
     private var imageHeight: Int = 0
@@ -26,8 +31,30 @@ class PoseOverlay @JvmOverloads constructor(
         isAntiAlias = true
     }
 
-    fun updatePose(pose: Pose, isFrontAnalysis: Boolean, imageWidth: Int, imageHeight: Int) {
-        this.pose = pose
+    // ML Kit pose update
+    fun updatePose(
+        pose: Pose,
+        isFrontAnalysis: Boolean,
+        imageWidth: Int,
+        imageHeight: Int
+    ) {
+        this.poseML = pose
+        this.poseMP = null
+        this.isFrontAnalysis = isFrontAnalysis
+        this.imageWidth = imageWidth
+        this.imageHeight = imageHeight
+        invalidate()
+    }
+
+    // Mediapipe pose update
+    fun updatePoseMediapipe(
+        landmarks: List<LandmarkProto.NormalizedLandmark>,
+        isFrontAnalysis: Boolean,
+        imageWidth: Int,
+        imageHeight: Int
+    ) {
+        this.poseMP = landmarks
+        this.poseML = null
         this.isFrontAnalysis = isFrontAnalysis
         this.imageWidth = imageWidth
         this.imageHeight = imageHeight
@@ -37,7 +64,6 @@ class PoseOverlay @JvmOverloads constructor(
     override fun onDraw(canvas: Canvas) {
         super.onDraw(canvas)
 
-        val currentPose = pose ?: return
         if (imageWidth == 0 || imageHeight == 0 || width == 0 || height == 0) return
 
         // Calculate scaling factors
@@ -48,15 +74,13 @@ class PoseOverlay @JvmOverloads constructor(
         // Mirror the canvas for front-facing camera
         canvas.scale(-1f, 1f, width / 2f, height / 2f)
 
-        if (isFrontAnalysis) {
-            drawFrontAnalysis(canvas, currentPose, scaleX, scaleY)
-        } else {
-            drawSideAnalysis(canvas, currentPose, scaleX, scaleY)
+        when {
+            poseML != null -> drawMLKit(canvas, poseML!!, scaleX, scaleY)
+            poseMP != null -> drawMediaPipe(canvas, poseMP!!)
         }
     }
 
-    private fun drawFrontAnalysis(canvas: Canvas, pose: Pose, scaleX: Float, scaleY: Float) {
-        // Draw all visible keypoints
+    private fun drawMLKit(canvas: Canvas, pose: Pose, scaleX: Float, scaleY: Float) {
         val landmarks = listOf(
             PoseLandmark.LEFT_SHOULDER, PoseLandmark.RIGHT_SHOULDER,
             PoseLandmark.LEFT_ELBOW, PoseLandmark.RIGHT_ELBOW,
@@ -67,13 +91,12 @@ class PoseOverlay @JvmOverloads constructor(
             PoseLandmark.LEFT_EAR, PoseLandmark.RIGHT_EAR
         )
 
-        // Draw keypoints
-        landmarks.forEach { landmarkType ->
-            val landmark = pose.getPoseLandmark(landmarkType)
-            if (landmark != null && isVisible(landmark)) {
+        landmarks.forEach { type ->
+            val lm = pose.getPoseLandmark(type)
+            if (lm != null && lm.inFrameLikelihood > 0.7f) {
                 canvas.drawCircle(
-                    landmark.position.x * scaleX,
-                    landmark.position.y * scaleY,
+                    lm.position.x * scaleX,
+                    lm.position.y * scaleY,
                     10f,
                     pointPaint
                 )
@@ -81,50 +104,42 @@ class PoseOverlay @JvmOverloads constructor(
         }
     }
 
-    private fun drawSideAnalysis(canvas: Canvas, pose: Pose, scaleX: Float, scaleY: Float) {
-        // Determine which side is visible
-        val leftHip = pose.getPoseLandmark(PoseLandmark.LEFT_HIP)
-        val leftKnee = pose.getPoseLandmark(PoseLandmark.LEFT_KNEE)
-        val rightHip = pose.getPoseLandmark(PoseLandmark.RIGHT_HIP)
-        val rightKnee = pose.getPoseLandmark(PoseLandmark.RIGHT_KNEE)
+    private val TARGET_MEDIAPIPE_LANDMARKS = setOf(
+        11, // LEFT_SHOULDER
+        12, // RIGHT_SHOULDER
+        13, // LEFT_ELBOW
+        14, // RIGHT_ELBOW
+        15, // LEFT_WRIST
+        16, // RIGHT_WRIST
+        23, // LEFT_HIP
+        24, // RIGHT_HIP
+        25, // LEFT_KNEE
+        26, // RIGHT_KNEE
+        27, // LEFT_ANKLE
+        28, // RIGHT_ANKLE
+        7,  // LEFT_EAR
+        8   // RIGHT_EAR
+    )
 
-        val isLeftSide = leftHip != null && leftKnee != null &&
-                isVisible(leftHip) && isVisible(leftKnee)
-        val isRightSide = rightHip != null && rightKnee != null &&
-                isVisible(rightHip) && isVisible(rightKnee)
+    private fun drawMediaPipe(
+        canvas: Canvas,
+        landmarks: List<LandmarkProto.NormalizedLandmark>,
+    ) {
 
-        // Choose which side to draw
-        val landmarks = if (isLeftSide) {
-            listOf(
-                PoseLandmark.LEFT_SHOULDER, PoseLandmark.LEFT_ELBOW, PoseLandmark.LEFT_WRIST,
-                PoseLandmark.LEFT_HIP, PoseLandmark.LEFT_KNEE, PoseLandmark.LEFT_ANKLE,
-                PoseLandmark.LEFT_EAR
-            )
-        } else if (isRightSide) {
-            listOf(
-                PoseLandmark.RIGHT_SHOULDER, PoseLandmark.RIGHT_ELBOW, PoseLandmark.RIGHT_WRIST,
-                PoseLandmark.RIGHT_HIP, PoseLandmark.RIGHT_KNEE, PoseLandmark.RIGHT_ANKLE,
-                PoseLandmark.RIGHT_EAR
-            )
-        } else {
-            emptyList()
-        }
+        landmarks.withIndex().forEach { (index, lm) ->
+            if (index !in TARGET_MEDIAPIPE_LANDMARKS) return@forEach
 
-        // Draw keypoints
-        landmarks.forEach { landmarkType ->
-            val landmark = pose.getPoseLandmark(landmarkType)
-            if (landmark != null && isVisible(landmark)) {
-                canvas.drawCircle(
-                    landmark.position.x * scaleX,
-                    landmark.position.y * scaleY,
-                    10f,
-                    pointPaint
-                )
+            val normalizedX = lm.y
+            val normalizedY = lm.x
+
+            val invertedNormalizedY = 1.0f - normalizedY
+
+            val drawX = normalizedX * width.toFloat()
+            val drawY = invertedNormalizedY * height.toFloat()
+
+            if (lm.visibility > 0.1f) {
+                canvas.drawCircle(drawX, drawY, 10f, pointPaint)
             }
         }
-    }
-
-    private fun isVisible(landmark: PoseLandmark): Boolean {
-        return landmark.inFrameLikelihood > 0.7f
     }
 }

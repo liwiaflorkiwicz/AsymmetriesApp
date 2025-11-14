@@ -219,7 +219,7 @@
                             android:layout_width="0dp"
                             android:layout_height="wrap_content"
                             android:layout_weight="1"
-                            android:text="Press 'View Results' to preview a video or see your asymmetry report."
+                            android:text="Press 'View Results' to preview your asymmetry report."
                             android:textSize="16sp"
                             android:textColor="#333333"
                             android:lineSpacingExtra="4dp" />
