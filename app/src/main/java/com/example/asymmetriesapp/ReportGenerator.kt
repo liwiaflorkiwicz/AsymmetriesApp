@@ -25,6 +25,7 @@ class ReportGenerator : AppCompatActivity() {
     private var exerciseType: String = "POSE"
     private var reportPath: String = ""
     private var videoPath: String = ""
+    private var sessionTimestamp: Long = 0L
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -35,6 +36,7 @@ class ReportGenerator : AppCompatActivity() {
         reportPath = intent.getStringExtra("REPORT_PATH") ?: ""
         videoPath = intent.getStringExtra("VIDEO_PATH") ?: ""
         exerciseType = intent.getStringExtra("EXERCISE_TYPE") ?: "POSE"
+        sessionTimestamp = intent.getLongExtra("TIMESTAMP", 0L)
 
         if (reportPath.isEmpty()) {
             Toast.makeText(this, "Error: No report data", Toast.LENGTH_SHORT).show()
@@ -60,8 +62,8 @@ class ReportGenerator : AppCompatActivity() {
         binding.tvReportTitle.text = "Analysis Report"
         binding.tvExerciseType.text = "Exercise: ${getExerciseName(exerciseType)}"
 
-        val dateFormat = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault())
-        binding.tvTimestamp.text = dateFormat.format(Date())
+        val dateFormat = SimpleDateFormat("MMM dd, yyyy - HH:mm", Locale.getDefault())
+        binding.tvTimestamp.text = dateFormat.format(Date(sessionTimestamp))
     }
 
     private fun loadAndDisplayResults() {

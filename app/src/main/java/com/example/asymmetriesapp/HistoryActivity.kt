@@ -79,6 +79,7 @@ class HistoryActivity : AppCompatActivity() {
                             val intent = Intent(this@HistoryActivity, ReportGenerator::class.java)
                             intent.putExtra("REPORT_PATH", result.csvPath)
                             intent.putExtra("EXERCISE_TYPE", result.exerciseType)
+                            intent.putExtra("TIMESTAMP", result.timestamp)
                             startActivity(intent)
                         }
 
@@ -93,7 +94,7 @@ class HistoryActivity : AppCompatActivity() {
         // If we have asymmetry summary (in pixels), display that
         result.avgAsymmetry?.let { avg ->
             val max = result.maxAsymmetry ?: avg
-            val statText = "Avg: ${"%.2f".format(avg)} px • Max: ${"%.2f".format(max)} px"
+            val statText = "Avg: ${"%.2f".format(avg)} %% • Max: ${"%.2f".format(max)} %%"
 
             val (qualityText, color) = when {
                 avg < 5.0f -> "Excellent" to Color.parseColor("#4CAF50") // green

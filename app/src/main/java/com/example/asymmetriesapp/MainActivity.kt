@@ -23,6 +23,8 @@ import com.google.common.util.concurrent.ListenableFuture
 // mlkit imports
 import com.google.mlkit.vision.common.InputImage
 import com.google.mlkit.vision.pose.Pose
+// mediapipe imports
+import com.google.mediapipe.formats.proto.LandmarkProto.NormalizedLandmarkList
 
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -33,10 +35,15 @@ import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
 
 class MainActivity : AppCompatActivity() {
+    private enum class DetectionModel { MLKIT, MEDIAPIPE }
+
+    private val model = DetectionModel.MEDIAPIPE
+
     private lateinit var viewBinding: ActivityMainBinding
     private lateinit var cameraExecutor: ExecutorService
     private lateinit var imageAnalyzer: ImageAnalysis
-    private lateinit var poseDetectorMLKit: PoseDetectorMLKit     // ML Kit Pose Detector wrapper
+    private var poseDetectorMLKit: PoseDetectorMLKit? = null     // ML Kit Pose Detector wrapper
+    private var poseDetectorMediapipe: PoseDetectorMediapipe? = null // Mediapipe Pose Detector wrapper
     private lateinit var db: AppDatabase
 
     private var exerciseType: String = "POSE" // Default
@@ -70,8 +77,18 @@ class MainActivity : AppCompatActivity() {
             viewBinding.btnStartAnalysis?.bringToFront()
 
             cameraExecutor = Executors.newSingleThreadExecutor()
-            // ML Kit Pose Detector
-            poseDetectorMLKit = PoseDetectorMLKit()
+
+            when (model) {
+                DetectionModel.MLKIT -> {
+                    poseDetectorMLKit = PoseDetectorMLKit()
+                    Log.d(TAG, "Using ML Kit Pose Detector")
+                }
+
+                DetectionModel.MEDIAPIPE -> {
+                    poseDetectorMediapipe = PoseDetectorMediapipe(applicationContext)
+                    Log.d(TAG, "Using Mediapipe Pose Detector")
+                }
+            }
 
             // Request camera permissions
             if (allPermissionsGranted()) {
@@ -115,12 +132,15 @@ class MainActivity : AppCompatActivity() {
                 RecordingState.IDLE -> {
                     startCountdown()
                 }
+
                 RecordingState.COUNTDOWN -> {
                     cancelCountdown()   // allowing cancel during countdown
                 }
+
                 RecordingState.RECORDING -> {
                     completeRecording() // stop recording
                 }
+
                 RecordingState.READY_FOR_RESULTS -> {
                     generateAndShowResults()
                 }
@@ -133,20 +153,33 @@ class MainActivity : AppCompatActivity() {
         updateButtonUI("Cancel")
 
         var isPoseVisibleInLastCheck = false
-        var poseForScale: Pose? = null
-
+        var poseForScale: Any? = null
         countdownJob = lifecycleScope.launch {
             for (i in 10 downTo 1) {
                 if (!isActive) break
 
-                val currentPose = poseDetectorMLKit.getCurrentPose()     // get latest pose PoseDetector
-                val isPoseValid = currentPose != null && poseDetectorMLKit.isPoseVisible(currentPose)
+                val isPoseValid: Boolean
+
+                when (model) {
+                    DetectionModel.MLKIT -> {
+                        val currentPose = poseDetectorMLKit?.getCurrentPose()
+                        isPoseValid = currentPose is Pose && poseDetectorMLKit!!.isPoseVisible(currentPose)
+                        poseForScale = if (isPoseValid) currentPose else null
+                    }
+
+                    DetectionModel.MEDIAPIPE -> {
+                        val mpPose = poseDetectorMediapipe?.currentPoseLandmarks
+                        isPoseValid = mpPose != null && poseDetectorMediapipe!!.isPoseVisible(mpPose)
+                        poseForScale = if (isPoseValid) mpPose else null
+                    }
+
+                }
+                Log.d(TAG, "isPoseValid: $isPoseValid")
 
                 isPoseVisibleInLastCheck = isPoseValid
 
                 runOnUiThread {
                     if (isPoseValid) {
-                        poseForScale = currentPose
                         viewBinding.textView?.text = "Body detected - $i"
                         viewBinding.textView?.setTextColor(getColor(R.color.holo_green_dark))
                     } else {
@@ -166,7 +199,10 @@ class MainActivity : AppCompatActivity() {
                 if (isPoseVisibleInLastCheck) {
                     // If pose was correct at the end of countdown
                     if (poseForScale != null && isFrontAnalysis) {
-                        poseDetectorMLKit.calculateScale(poseForScale!!)
+                        when (model) {
+                            DetectionModel.MLKIT -> poseDetectorMLKit?.calculateScale(poseForScale as Pose)
+                            DetectionModel.MEDIAPIPE -> poseDetectorMediapipe?.calculateScale(poseForScale as NormalizedLandmarkList)
+                        }
                         Log.d(TAG, "Normalization Scale Set before recording.")
                     }
                     startRecording()
@@ -194,15 +230,35 @@ class MainActivity : AppCompatActivity() {
 
         // Start saving CSV keypoints
         csvFile?.let { file ->
-            poseDetectorMLKit.startSavingKeypoints(file, exerciseType)
+            when (model) {
+                DetectionModel.MLKIT -> poseDetectorMLKit?.startSavingKeypoints(file, exerciseType)
+                DetectionModel.MEDIAPIPE -> poseDetectorMediapipe?.startSavingKeypoints(file, exerciseType)
+
+            }
             currentState = RecordingState.RECORDING
             remainingTime = 20
 
             recordingJob = lifecycleScope.launch {
                 while (remainingTime > 0 && isActive) {
 
-                    val currentPose = poseDetectorMLKit.getCurrentPose()
-                    val isPoseValid = currentPose != null && poseDetectorMLKit.isPoseVisible(currentPose)
+                    val currentPose: Any?
+                    val isPoseValid: Boolean
+
+                    when (model) {
+                        DetectionModel.MLKIT -> {
+                            currentPose = poseDetectorMLKit?.getCurrentPose()
+                            isPoseValid =
+                                currentPose is Pose && poseDetectorMLKit!!.isPoseVisible(currentPose)
+                        }
+
+                        DetectionModel.MEDIAPIPE -> {
+                            currentPose = poseDetectorMediapipe?.getCurrentPose()
+                            isPoseValid =
+                                currentPose is NormalizedLandmarkList && poseDetectorMediapipe!!.isPoseVisible(
+                                    currentPose
+                                )
+                        }
+                    }
 
                     if (!isPoseValid) {
                         runOnUiThread {
@@ -235,7 +291,10 @@ class MainActivity : AppCompatActivity() {
 
     private fun completeRecording(csvFile: File? = null) {
         recordingJob?.cancel()
-        poseDetectorMLKit.stopSavingKeypoints()
+        when (model) {
+            DetectionModel.MLKIT -> poseDetectorMLKit?.stopSavingKeypoints()
+            DetectionModel.MEDIAPIPE -> poseDetectorMediapipe?.stopSavingKeypoints()
+        }
 
         currentState = RecordingState.READY_FOR_RESULTS
         updateButtonUI("Generate Results")
@@ -245,7 +304,7 @@ class MainActivity : AppCompatActivity() {
             viewBinding.textView?.setTextColor(getColor(android.R.color.holo_green_dark))
         }
 
-        // save to database (also include video path)
+        // save to database
         val analysisResult = csvFile?.let { ReportGenerator.parseCSVData(it, exerciseType) }
 
         val avgAsymmetry = if (analysisResult is AnalysisResult.AsymmetryResult) {
@@ -292,7 +351,10 @@ class MainActivity : AppCompatActivity() {
                 lifecycleScope.launch {
                     try {
                         // Analyze the data
-                        val reportPath = poseDetectorMLKit.analyzeRecordedData(file)
+                        val reportPath = when (model) {
+                            DetectionModel.MLKIT -> poseDetectorMLKit?.analyzeRecordedData(file)
+                            DetectionModel.MEDIAPIPE -> poseDetectorMediapipe?.analyzeRecordedData(file)
+                        } ?: throw Exception("Analysis failed")
 
                         // Navigate to results
                         val intent = Intent(this@MainActivity, ReportGenerator::class.java).apply {
@@ -391,7 +453,8 @@ class MainActivity : AppCompatActivity() {
                 Log.d(TAG, "Camera started with analysis")
             } catch (e: Exception) {
                 Log.e(TAG, "Failed to start camera", e)
-                Toast.makeText(this, "Failed to start camera: ${e.message}", Toast.LENGTH_SHORT).show()
+                Toast.makeText(this, "Failed to start camera: ${e.message}", Toast.LENGTH_SHORT)
+                    .show()
             }
         }, ContextCompat.getMainExecutor(this))
     }
@@ -406,44 +469,81 @@ class MainActivity : AppCompatActivity() {
             )
 
             // ML Kit Pose Detection
-            poseDetectorMLKit.detectPose(
-                image,
-                exerciseType,
-                onSuccess = { pose ->
-                    // Update overlay with pose
-                    runOnUiThread {
-                        val rotatedWidth = if (imageProxy.imageInfo.rotationDegrees == 90 ||
-                            imageProxy.imageInfo.rotationDegrees == 270) {
-                            image.height  // 480
-                        } else {
-                            image.width
-                        }
+            when (model) {
+                DetectionModel.MEDIAPIPE -> {
+                    poseDetectorMediapipe?.detectPose(
+                        mediaImage,
+                        imageProxy.imageInfo.rotationDegrees,
+                        imageProxy.imageInfo.timestamp
+                    )
 
-                        val rotatedHeight = if (imageProxy.imageInfo.rotationDegrees == 90 ||
-                            imageProxy.imageInfo.rotationDegrees == 270) {
-                            image.width  // 640
-                        } else {
-                            image.height
-                        }
+                    poseDetectorMediapipe?.currentPoseLandmarks?.let { landmarkListProto ->
+                        val list = landmarkListProto.landmarkList
 
-                        viewBinding.poseOverlay?.updatePose(
-                            pose,
-                            isFrontAnalysis,
-                            rotatedWidth,   // Now 480
-                            rotatedHeight   // Now 640
-                        )
+                        val rotationDegrees = imageProxy.imageInfo.rotationDegrees
+                        val isRotated = rotationDegrees == 90 || rotationDegrees == 270
+
+                        val rotatedWidth = if (isRotated) image.height else image.width
+                        val rotatedHeight = if (isRotated) image.width else image.height
+
+                        Log.d(TAG, "Mediapipe landmarks received (count: ${list.size}). Updating overlay. Rotated W:$rotatedWidth H:$rotatedHeight")
+
+                        runOnUiThread {
+                            viewBinding.poseOverlay?.updatePoseMediapipe(
+                                list,
+                                isFrontAnalysis,
+                                rotatedWidth,
+                                rotatedHeight
+                            )
+                        }
                     }
-                    imageProxy.close()
-                },
-                onFailure = { e ->
-                    Log.e(TAG, "Pose detection failed: ${e.message}")
+
                     imageProxy.close()
                 }
-            )
+
+                DetectionModel.MLKIT -> {
+                    poseDetectorMLKit?.detectPose(
+                        image,
+                        exerciseType,
+                        onSuccess = { pose ->
+                            // Update overlay with pose
+                            runOnUiThread {
+                                val rotatedWidth = if (imageProxy.imageInfo.rotationDegrees == 90 ||
+                                    imageProxy.imageInfo.rotationDegrees == 270) {
+                                    image.height  // 480
+                                } else {
+                                    image.width
+                                }
+
+                                val rotatedHeight = if (imageProxy.imageInfo.rotationDegrees == 90 ||
+                                    imageProxy.imageInfo.rotationDegrees == 270) {
+                                    image.width  // 640
+                                } else {
+                                    image.height
+                                }
+
+                                viewBinding.poseOverlay?.updatePose(
+                                    pose,
+                                    isFrontAnalysis,
+                                    rotatedWidth,   // Now 480
+                                    rotatedHeight   // Now 640
+                                )
+                            }
+                            imageProxy.close()
+                        },
+                        onFailure = { e ->
+                            Log.e(TAG, "Pose detection failed: ${e.message}")
+                            imageProxy.close()
+                        }
+                    )
+                }
+            }
+
         } else {
             imageProxy.close()
         }
     }
+
 
     private val activityResultLauncher =
         registerForActivityResult(
@@ -488,7 +588,10 @@ class MainActivity : AppCompatActivity() {
     override fun onDestroy() {
         super.onDestroy()
         cameraExecutor.shutdown()
-        poseDetectorMLKit.close()
+        when (model) {
+            DetectionModel.MLKIT -> poseDetectorMLKit?.close()
+            DetectionModel.MEDIAPIPE -> poseDetectorMediapipe?.close() // Zakładając, że masz metodę close() w Mediapipe Pose Detector
+        }
         countdownJob?.cancel()
         recordingJob?.cancel()
     }
