@@ -471,11 +471,7 @@ class MainActivity : AppCompatActivity() {
             // ML Kit Pose Detection
             when (model) {
                 DetectionModel.MEDIAPIPE -> {
-                    poseDetectorMediapipe?.detectPose(
-                        mediaImage,
-                        imageProxy.imageInfo.rotationDegrees,
-                        imageProxy.imageInfo.timestamp
-                    )
+                    poseDetectorMediapipe?.detectPose(imageProxy)
 
                     poseDetectorMediapipe?.currentPoseLandmarks?.let { landmarkListProto ->
                         val list = landmarkListProto.landmarkList

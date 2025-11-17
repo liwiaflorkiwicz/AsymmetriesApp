@@ -1,23 +1,18 @@
 package com.example.asymmetriesapp
 
 import android.content.Context
-import android.graphics.Bitmap
-import android.graphics.BitmapFactory
-import android.graphics.ImageFormat
-import android.graphics.Rect
-import android.graphics.YuvImage
 import android.util.Log
+import androidx.camera.core.ImageProxy
 import com.google.mediapipe.formats.proto.LandmarkProto.NormalizedLandmark
 import com.google.mediapipe.formats.proto.LandmarkProto.NormalizedLandmarkList
+import com.google.mediapipe.framework.image.BitmapImageBuilder
 import com.google.mediapipe.tasks.core.BaseOptions
 import com.google.mediapipe.tasks.vision.core.RunningMode
 import com.google.mediapipe.tasks.vision.poselandmarker.PoseLandmarker
 import com.google.mediapipe.tasks.vision.poselandmarker.PoseLandmarkerResult
 import com.google.mediapipe.tasks.vision.core.ImageProcessingOptions
 import com.google.mediapipe.tasks.components.containers.NormalizedLandmark as TaskNormalizedLandmark
-import com.google.mediapipe.framework.image.BitmapImageBuilder
 import java.io.BufferedWriter
-import java.io.ByteArrayOutputStream
 import java.io.File
 import java.io.FileWriter
 import java.util.concurrent.atomic.AtomicLong
@@ -35,20 +30,19 @@ class PoseDetectorMediapipe(context: Context? = null) {
     private var csvWriter: BufferedWriter? = null
     private var isRecording = false
     private var currentExerciseType: String = "POSE"
-    private var normalizationScale: Float = 1.0f
 
-    // Frame id generator
+    // Frames counter
     private val frameCounter = AtomicLong(0L)
 
     // Landmark pairs + names to match MLKit mapping
     private val asymmetryPairs = listOf(
-        Pair(LEFT_SHOULDER, RIGHT_SHOULDER) to "shoulder",
-        Pair(LEFT_HIP, RIGHT_HIP) to "hip",
-        Pair(LEFT_KNEE, RIGHT_KNEE) to "knee",
-        Pair(LEFT_ANKLE, RIGHT_ANKLE) to "ankle",
-        Pair(LEFT_ELBOW, RIGHT_ELBOW) to "elbow",
-        Pair(LEFT_WRIST, RIGHT_WRIST) to "wrist",
-        Pair(LEFT_EAR, RIGHT_EAR) to "ear"
+        Pair(RIGHT_SHOULDER, LEFT_SHOULDER) to "shoulder",
+        Pair(RIGHT_HIP, LEFT_HIP) to "hip",
+        Pair(RIGHT_KNEE, LEFT_KNEE) to "knee",
+        Pair(RIGHT_ANKLE, LEFT_ANKLE) to "ankle",
+        Pair(RIGHT_ELBOW, LEFT_ELBOW) to "elbow",
+        Pair(RIGHT_WRIST, LEFT_WRIST) to "wrist",
+        Pair(RIGHT_EAR, LEFT_EAR) to "ear"
     )
 
     init {
@@ -80,46 +74,28 @@ class PoseDetectorMediapipe(context: Context? = null) {
     }
 
     /**
-     * Convert media Image (YUV) to Bitmap
-     */
-    private fun yuvToBitmap(image: android.media.Image): Bitmap {
-        val yBuffer = image.planes[0].buffer
-        val uBuffer = image.planes[1].buffer
-        val vBuffer = image.planes[2].buffer
-
-        val ySize = yBuffer.remaining()
-        val uSize = uBuffer.remaining()
-        val vSize = vBuffer.remaining()
-
-        val nv21 = ByteArray(ySize + uSize + vSize)
-
-        yBuffer.get(nv21, 0, ySize)
-        vBuffer.get(nv21, ySize, vSize)
-        uBuffer.get(nv21, ySize + vSize, uSize)
-
-        val yuvImage = YuvImage(nv21, ImageFormat.NV21, image.width, image.height, null)
-        val out = ByteArrayOutputStream()
-        yuvImage.compressToJpeg(Rect(0, 0, image.width, image.height), 100, out)
-        val jpegBytes = out.toByteArray()
-
-        return BitmapFactory.decodeByteArray(jpegBytes, 0, jpegBytes.size)
-    }
-
-
-    /**
      * Detect pose in the given image and handle success/failure via callbacks.
      */
     fun detectPose(
-        mediaImage: android.media.Image,
-        rotation: Int,
-        timestamp: Long
+        imageProxy: ImageProxy
     ) {
         if (poseLandmarker == null) {
             Log.e("PoseDetectorMP", "PoseLandmarker not initialized.")
+            imageProxy.close()
             return
         }
 
-        val bitmap = yuvToBitmap(mediaImage)
+        val bitmap = try {
+            imageProxy.toBitmap()
+        } catch (e: Exception) {
+            Log.e("PoseDetectorMP", "Failed to convert ImageProxy to Bitmap: ${e.message}")
+            imageProxy.close()
+            return
+        }
+
+        val rotation = imageProxy.imageInfo.rotationDegrees
+        val timestamp = imageProxy.imageInfo.timestamp
+        imageProxy.close()
 
         val mpImage = try {
             BitmapImageBuilder(bitmap).build()
@@ -129,7 +105,7 @@ class PoseDetectorMediapipe(context: Context? = null) {
         }
 
         try {
-            val timestampMs = if (timestamp > 1_000_000_000L) timestamp / 1_000_000L else timestamp
+            val timestampMs = timestamp / 1_000_000L
 
             val imageProcessingOptions = ImageProcessingOptions.builder()
                 .setRotationDegrees(rotation)
@@ -147,10 +123,11 @@ class PoseDetectorMediapipe(context: Context? = null) {
             val allPoses: List<List<TaskNormalizedLandmark>> = result.landmarks()
             if (allPoses.isEmpty()) {
                 Log.d("PoseDetectorMP", "No poses detected.")
+                this.currentPoseLandmarks = null
                 return
             }
 
-            val firstPose: List<TaskNormalizedLandmark> = allPoses[0]
+            val firstPose: List<com.google.mediapipe.tasks.components.containers.NormalizedLandmark> = allPoses[0]
 
             val protoBuilder = NormalizedLandmarkList.newBuilder()
             for (lm in firstPose) {
@@ -158,48 +135,41 @@ class PoseDetectorMediapipe(context: Context? = null) {
                     .setX(lm.x())
                     .setY(lm.y())
                     .setZ(lm.z())
-                    .setVisibility(1.0f) // Visibility default as 1.0f
+                    .setVisibility(lm.visibility().orElse(0.0f))
                 protoBuilder.addLandmark(pb)
             }
             val landmarkListProto = protoBuilder.build()
             this.currentPoseLandmarks = landmarkListProto
 
+
             // If recording, write CSV line(s)
             if (isRecording && csvWriter != null) {
                 try {
-                    // unique frame id
                     val ts = System.currentTimeMillis()
 
-                    // timestamp,exercise_type, <asymmetry columns>, <squat_angle>,<plank_angle>, <coords...>
                     val rowBuilder = StringBuilder()
                     rowBuilder.append("$ts,$currentExerciseType,")
 
-                    val leftShoulder = landmarkListProto.landmarkList.getOrNull(LEFT_SHOULDER)
-                    val rightShoulder = landmarkListProto.landmarkList.getOrNull(RIGHT_SHOULDER)
-                    val leftHip = landmarkListProto.landmarkList.getOrNull(LEFT_HIP)
-                    val rightHip = landmarkListProto.landmarkList.getOrNull(RIGHT_HIP)
-
-                    var torsoHeight = 1.0f
-
-                    if (leftShoulder != null && rightShoulder != null && leftHip != null && rightHip != null) {
-                        val midShoulderY = (leftShoulder.y + rightShoulder.y) / 2f
-                        val midHipY = (leftHip.y + rightHip.y) / 2f
-                        val calculatedHeight = abs(midShoulderY - midHipY)
-                        if (calculatedHeight > 0.05f) {
-                            torsoHeight = calculatedHeight
-                        }
-                    }
-
-                    // Asymmetry percent diffs (front)
-                    for ((pair, _) in asymmetryPairs) {
+                    for ((pair, name) in asymmetryPairs) {
                         val left = landmarkListProto.landmarkList.getOrNull(pair.first)
                         val right = landmarkListProto.landmarkList.getOrNull(pair.second)
 
                         if (isFrontAnalysis() && left != null && right != null && isLandmarkVisible(left) && isLandmarkVisible(right)) {
-                            val (smLeftY, smRightY) = smoothY(left.y, right.y)
-                            val diffY = abs(smLeftY - smRightY)
-                            val percentageDiff = (diffY / torsoHeight) * 100f
-                            rowBuilder.append(String.format(java.util.Locale.US, "%.2f,", percentageDiff))
+
+                            val leftYNormalized = left.y
+                            val rightYNormalized = right.y
+
+                            val smLeftY = smoothY(pair.first, leftYNormalized)
+                            val smRightY = smoothY(pair.second, rightYNormalized)
+
+                            val diffYNormalized = abs(smLeftY - smRightY)
+
+                            rowBuilder.append(String.format(java.util.Locale.US, "%.6f,", diffYNormalized))
+
+                            if (name == "shoulder") {
+                                Log.d("PoseDetectorMP", "Shoulder Norm. Diff: $diffYNormalized (L_Y: $smLeftY, R_Y: $smRightY)")
+                            }
+
                         } else {
                             rowBuilder.append("NaN,")
                         }
@@ -209,11 +179,12 @@ class PoseDetectorMediapipe(context: Context? = null) {
                     if (isSideAnalysis()) {
                         when (currentExerciseType) {
                             "SIDE_SQUAT" -> {
+                                val leftHip = getLandmark(landmarkListProto, LEFT_HIP)
                                 val leftKnee = getLandmark(landmarkListProto, LEFT_KNEE)
                                 val leftAnkle = getLandmark(landmarkListProto, LEFT_ANKLE)
+                                val rightHip = getLandmark(landmarkListProto, RIGHT_HIP)
                                 val rightKnee = getLandmark(landmarkListProto, RIGHT_KNEE)
                                 val rightAnkle = getLandmark(landmarkListProto, RIGHT_ANKLE)
-
                                 val squatAngle = when {
                                     areAllVisibleNormals(leftHip, leftKnee, leftAnkle) -> calculate3PointAngleNormals(leftHip!!, leftKnee!!, leftAnkle!!)
                                     areAllVisibleNormals(rightHip, rightKnee, rightAnkle) -> calculate3PointAngleNormals(rightHip!!, rightKnee!!, rightAnkle!!)
@@ -222,9 +193,12 @@ class PoseDetectorMediapipe(context: Context? = null) {
                                 rowBuilder.append("${squatAngle ?: "NaN"},NaN,")
                             }
                             "PLANK" -> {
+                                val leftShoulder = getLandmark(landmarkListProto, LEFT_SHOULDER)
+                                val leftHip = getLandmark(landmarkListProto, LEFT_HIP)
                                 val leftKnee = getLandmark(landmarkListProto, LEFT_KNEE)
+                                val rightShoulder = getLandmark(landmarkListProto, RIGHT_SHOULDER)
+                                val rightHip = getLandmark(landmarkListProto, RIGHT_HIP)
                                 val rightKnee = getLandmark(landmarkListProto, RIGHT_KNEE)
-
                                 val plankAngle = when {
                                     areAllVisibleNormals(leftShoulder, leftHip, leftKnee) -> calculate3PointAngleNormals(leftShoulder!!, leftHip!!, leftKnee!!)
                                     areAllVisibleNormals(rightShoulder, rightHip, rightKnee) -> calculate3PointAngleNormals(rightShoulder!!, rightHip!!, rightKnee!!)
@@ -240,13 +214,20 @@ class PoseDetectorMediapipe(context: Context? = null) {
                         rowBuilder.append("NaN,NaN,")
                     }
 
-                    // Coordinates for all asymmetryPairs (left_x,left_y,right_x,right_y), converted to pseudo-pixels
                     for ((pair, _) in asymmetryPairs) {
                         val left = landmarkListProto.landmarkList.getOrNull(pair.first)
                         val right = landmarkListProto.landmarkList.getOrNull(pair.second)
 
-                        if (left != null) rowBuilder.append("${left.x * 1000f},${left.y * 1000f},") else rowBuilder.append("NaN,NaN,")
-                        if (right != null) rowBuilder.append("${right.x * 1000f},${right.y * 1000f},") else rowBuilder.append("NaN,NaN,")
+                        if (left != null) {
+                            rowBuilder.append(String.format(java.util.Locale.US, "%.6f,%.6f,", left.x, left.y))
+                        } else {
+                            rowBuilder.append("NaN,NaN,")
+                        }
+                        if (right != null) {
+                            rowBuilder.append(String.format(java.util.Locale.US, "%.6f,%.6f,", right.x, right.y))
+                        } else {
+                            rowBuilder.append("NaN,NaN,")
+                        }
                     }
 
                     rowBuilder.append("\n")
@@ -268,15 +249,20 @@ class PoseDetectorMediapipe(context: Context? = null) {
         }
     }
 
-    private val recentLeftYs = mutableListOf<Float>()
-    private val recentRightYs = mutableListOf<Float>()
-    private fun smoothY(left: Float, right: Float, window: Int = 5): Pair<Float, Float> {
-        recentLeftYs.add(left)
-        recentRightYs.add(right)
-        if (recentLeftYs.size > window) recentLeftYs.removeAt(0)
-        if (recentRightYs.size > window) recentRightYs.removeAt(0)
-        return Pair(recentLeftYs.average().toFloat(), recentRightYs.average().toFloat())
+    private val smoothingBuffers = mutableMapOf<String, MutableList<Float>>()
+
+    private fun smoothY(keypointIndex: Int, newValue: Float, window: Int = 5): Float {
+        val key = "landmark_${keypointIndex}_y"
+        val buffer = smoothingBuffers.getOrPut(key) { mutableListOf<Float>() }
+
+        buffer.add(newValue)
+        if (buffer.size > window) {
+            buffer.removeAt(0)
+        }
+
+        return buffer.average().toFloat()
     }
+
 
     private fun handleDetectionError(e: Exception) {
         Log.e("PoseDetectorMP", "Detection error: ${e.message}")
@@ -310,6 +296,7 @@ class PoseDetectorMediapipe(context: Context? = null) {
     fun startSavingKeypoints(file: File, exerciseType: String) {
         try {
             currentExerciseType = exerciseType
+            smoothingBuffers.clear()
             csvWriter = BufferedWriter(FileWriter(file, false))
 
             // header: timestamp,exercise_type, <asymmetry cols>, squat_angle,plank_angle, <coords...>
@@ -344,6 +331,7 @@ class PoseDetectorMediapipe(context: Context? = null) {
      */
     fun stopSavingKeypoints() {
         isRecording = false
+        smoothingBuffers.clear()
         try {
             csvWriter?.flush()
             csvWriter?.close()
