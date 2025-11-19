@@ -48,6 +48,8 @@ class MenuActivity : AppCompatActivity() {
         val intent = Intent(this, MainActivity::class.java).apply {
             putExtra("extra_exercise_type", exerciseType)
         }
+        val intentHelp = Intent(this, HelpActivity::class.java)
         startActivity(intent)
+        startActivity(intentHelp)
     }
 }
