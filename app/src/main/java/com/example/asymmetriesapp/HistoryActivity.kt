@@ -105,8 +105,8 @@ class HistoryActivity : AppCompatActivity() {
         }
 
         // Otherwise, if we have angle summary (degrees), display that
-        result.avgAngle?.let { avgAngle ->
-            val maxAngle = result.maxAngle ?: avgAngle
+        result.maxAngle?.let { maxAngle ->
+            val avgAngle = result.avgAngle ?: maxAngle
             val statText = "Avg: ${"%.1f".format(avgAngle)}° • Max: ${"%.1f".format(maxAngle)}°"
 
             // Choose ideal angle by exercise type (fallback general rules)

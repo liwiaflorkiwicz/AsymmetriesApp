@@ -201,7 +201,7 @@ class MainActivity : AppCompatActivity() {
                     if (poseForScale != null && isFrontAnalysis) {
                         when (model) {
                             DetectionModel.MLKIT -> poseDetectorMLKit?.calculateScale(poseForScale as Pose)
-                            DetectionModel.MEDIAPIPE -> poseDetectorMediapipe?.calculateScale(poseForScale as NormalizedLandmarkList)
+                            else -> { }
                         }
                         Log.d(TAG, "Normalization Scale Set before recording.")
                     }
@@ -226,7 +226,7 @@ class MainActivity : AppCompatActivity() {
 
     private fun startRecording() {
         // Prepare files
-        csvFile = File(filesDir, "keypoints_${System.currentTimeMillis()}_${exerciseType}.csv")
+        csvFile = File(filesDir, "keypoints_${System.currentTimeMillis()}_${exerciseType}_${model}.csv")
 
         // Start saving CSV keypoints
         csvFile?.let { file ->
@@ -481,8 +481,6 @@ class MainActivity : AppCompatActivity() {
 
                         val rotatedWidth = if (isRotated) image.height else image.width
                         val rotatedHeight = if (isRotated) image.width else image.height
-
-                        Log.d(TAG, "Mediapipe landmarks received (count: ${list.size}). Updating overlay. Rotated W:$rotatedWidth H:$rotatedHeight")
 
                         runOnUiThread {
                             viewBinding.poseOverlay?.updatePoseMediapipe(

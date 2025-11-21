@@ -141,7 +141,6 @@ class PoseDetectorMediapipe(context: Context? = null) {
             val landmarkListProto = protoBuilder.build()
             this.currentPoseLandmarks = landmarkListProto
 
-
             // If recording, write CSV line(s)
             if (isRecording && csvWriter != null) {
                 try {
@@ -150,32 +149,30 @@ class PoseDetectorMediapipe(context: Context? = null) {
                     val rowBuilder = StringBuilder()
                     rowBuilder.append("$ts,$currentExerciseType,")
 
-                    for ((pair, name) in asymmetryPairs) {
-                        val left = landmarkListProto.landmarkList.getOrNull(pair.first)
-                        val right = landmarkListProto.landmarkList.getOrNull(pair.second)
+                    // Write NaN for all height_diff columns (no calculation)
+                    for ((pair, _) in asymmetryPairs) {
+                        if (isFrontAnalysis()) {
+                            val left = landmarkListProto.landmarkList.getOrNull(pair.first)
+                            val right = landmarkListProto.landmarkList.getOrNull(pair.second)
 
-                        if (isFrontAnalysis() && left != null && right != null && isLandmarkVisible(left) && isLandmarkVisible(right)) {
+                            if (left != null && right != null &&
+                                isLandmarkVisible(left) && isLandmarkVisible(right)) {
+                                // Poprawione Y zgodnie z rysowaniem
+                                val leftY = left.x
+                                val rightY = right.x
+                                val heightDiff = abs(leftY - rightY) * 100f
 
-                            val leftYNormalized = left.y
-                            val rightYNormalized = right.y
-
-                            val smLeftY = smoothY(pair.first, leftYNormalized)
-                            val smRightY = smoothY(pair.second, rightYNormalized)
-
-                            val diffYNormalized = abs(smLeftY - smRightY)
-
-                            rowBuilder.append(String.format(java.util.Locale.US, "%.6f,", diffYNormalized))
-
-                            if (name == "shoulder") {
-                                Log.d("PoseDetectorMP", "Shoulder Norm. Diff: $diffYNormalized (L_Y: $smLeftY, R_Y: $smRightY)")
+                                rowBuilder.append("$heightDiff,")
+                            } else {
+                                rowBuilder.append("NaN,")
                             }
-
                         } else {
+                            // Side analysis - fill with NaN
                             rowBuilder.append("NaN,")
                         }
                     }
 
-                    // Angles: decide based on exercise type (SIDE_SQUAT / PLANK). For general case write NaN/NaN
+                    // Angles: decide based on exercise type (SIDE_SQUAT / PLANK)
                     if (isSideAnalysis()) {
                         when (currentExerciseType) {
                             "SIDE_SQUAT" -> {
@@ -186,8 +183,10 @@ class PoseDetectorMediapipe(context: Context? = null) {
                                 val rightKnee = getLandmark(landmarkListProto, RIGHT_KNEE)
                                 val rightAnkle = getLandmark(landmarkListProto, RIGHT_ANKLE)
                                 val squatAngle = when {
-                                    areAllVisibleNormals(leftHip, leftKnee, leftAnkle) -> calculate3PointAngleNormals(leftHip!!, leftKnee!!, leftAnkle!!)
-                                    areAllVisibleNormals(rightHip, rightKnee, rightAnkle) -> calculate3PointAngleNormals(rightHip!!, rightKnee!!, rightAnkle!!)
+                                    areAllVisibleNormals(leftHip, leftKnee, leftAnkle) ->
+                                        calculate3PointAngleNormals(leftHip!!, leftKnee!!, leftAnkle!!)
+                                    areAllVisibleNormals(rightHip, rightKnee, rightAnkle) ->
+                                        calculate3PointAngleNormals(rightHip!!, rightKnee!!, rightAnkle!!)
                                     else -> null
                                 }
                                 rowBuilder.append("${squatAngle ?: "NaN"},NaN,")
@@ -200,8 +199,10 @@ class PoseDetectorMediapipe(context: Context? = null) {
                                 val rightHip = getLandmark(landmarkListProto, RIGHT_HIP)
                                 val rightKnee = getLandmark(landmarkListProto, RIGHT_KNEE)
                                 val plankAngle = when {
-                                    areAllVisibleNormals(leftShoulder, leftHip, leftKnee) -> calculate3PointAngleNormals(leftShoulder!!, leftHip!!, leftKnee!!)
-                                    areAllVisibleNormals(rightShoulder, rightHip, rightKnee) -> calculate3PointAngleNormals(rightShoulder!!, rightHip!!, rightKnee!!)
+                                    areAllVisibleNormals(leftShoulder, leftHip, leftKnee) ->
+                                        calculate3PointAngleNormals(leftShoulder!!, leftHip!!, leftKnee!!)
+                                    areAllVisibleNormals(rightShoulder, rightHip, rightKnee) ->
+                                        calculate3PointAngleNormals(rightShoulder!!, rightHip!!, rightKnee!!)
                                     else -> null
                                 }
                                 rowBuilder.append("NaN,${plankAngle ?: "NaN"},")
@@ -214,25 +215,39 @@ class PoseDetectorMediapipe(context: Context? = null) {
                         rowBuilder.append("NaN,NaN,")
                     }
 
+                    // Record raw coordinates for all landmarks with detailed logging
                     for ((pair, _) in asymmetryPairs) {
                         val left = landmarkListProto.landmarkList.getOrNull(pair.first)
                         val right = landmarkListProto.landmarkList.getOrNull(pair.second)
 
+                        fun correctedCoordinates(lm: NormalizedLandmark): Pair<Float, Float> {
+                            // Zamiana x <-> y i odwrócenie pionu (zgodnie z rysowaniem)
+                            val drawX = lm.y
+                            val drawY = lm.x
+                            return drawX to drawY
+                        }
+
                         if (left != null) {
-                            rowBuilder.append(String.format(java.util.Locale.US, "%.6f,%.6f,", left.x, left.y))
+                            val (cx, cy) = correctedCoordinates(left)
+                            rowBuilder.append(String.format(java.util.Locale.US, "%.6f,%.6f,", cx, cy))
                         } else {
                             rowBuilder.append("NaN,NaN,")
                         }
+
                         if (right != null) {
-                            rowBuilder.append(String.format(java.util.Locale.US, "%.6f,%.6f,", right.x, right.y))
+                            val (cx, cy) = correctedCoordinates(right)
+                            rowBuilder.append(String.format(java.util.Locale.US, "%.6f,%.6f,", cx, cy))
                         } else {
                             rowBuilder.append("NaN,NaN,")
                         }
+
                     }
+
 
                     rowBuilder.append("\n")
                     csvWriter!!.write(rowBuilder.toString())
                     csvWriter!!.flush()
+
                 } catch (e: Exception) {
                     Log.e("PoseDetectorMP", "Failed writing CSV row: ${e.message}")
                 }
@@ -248,21 +263,6 @@ class PoseDetectorMediapipe(context: Context? = null) {
             }
         }
     }
-
-    private val smoothingBuffers = mutableMapOf<String, MutableList<Float>>()
-
-    private fun smoothY(keypointIndex: Int, newValue: Float, window: Int = 5): Float {
-        val key = "landmark_${keypointIndex}_y"
-        val buffer = smoothingBuffers.getOrPut(key) { mutableListOf<Float>() }
-
-        buffer.add(newValue)
-        if (buffer.size > window) {
-            buffer.removeAt(0)
-        }
-
-        return buffer.average().toFloat()
-    }
-
 
     private fun handleDetectionError(e: Exception) {
         Log.e("PoseDetectorMP", "Detection error: ${e.message}")
@@ -296,7 +296,6 @@ class PoseDetectorMediapipe(context: Context? = null) {
     fun startSavingKeypoints(file: File, exerciseType: String) {
         try {
             currentExerciseType = exerciseType
-            smoothingBuffers.clear()
             csvWriter = BufferedWriter(FileWriter(file, false))
 
             // header: timestamp,exercise_type, <asymmetry cols>, squat_angle,plank_angle, <coords...>
@@ -331,7 +330,6 @@ class PoseDetectorMediapipe(context: Context? = null) {
      */
     fun stopSavingKeypoints() {
         isRecording = false
-        smoothingBuffers.clear()
         try {
             csvWriter?.flush()
             csvWriter?.close()
