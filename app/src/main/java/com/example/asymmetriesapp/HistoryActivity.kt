@@ -94,11 +94,11 @@ class HistoryActivity : AppCompatActivity() {
         // If we have asymmetry summary (in pixels), display that
         result.avgAsymmetry?.let { avg ->
             val max = result.maxAsymmetry ?: avg
-            val statText = "Avg: ${"%.2f".format(avg)} %% • Max: ${"%.2f".format(max)} %%"
+            val statText = "Avg: ${"%.2f".format(avg)} % • Max: ${"%.2f".format(max)} %"
 
             val (qualityText, color) = when {
-                avg < 5.0f -> "Excellent" to Color.parseColor("#4CAF50") // green
-                avg < 10.0f -> "Good" to Color.parseColor("#FFC107")     // amber
+                max < 5.0f -> "Excellent" to Color.parseColor("#4CAF50") // green
+                max < 10.0f -> "Good" to Color.parseColor("#FFC107")     // amber
                 else -> "Needs Work" to Color.parseColor("#F44336")      // red
             }
             return Triple(statText, qualityText, color)
@@ -118,8 +118,8 @@ class HistoryActivity : AppCompatActivity() {
             val deviation = abs(avgAngle - ideal)
 
             val (qualityText, color) = when {
-                deviation < 15f -> "Excellent" to Color.parseColor("#4CAF50")
-                deviation < 30f -> "Good" to Color.parseColor("#FFC107")
+                deviation < 10f -> "Excellent" to Color.parseColor("#4CAF50")
+                deviation < 20f -> "Good" to Color.parseColor("#FFC107")
                 else -> "Needs Work" to Color.parseColor("#F44336")
             }
             return Triple(statText, qualityText, color)

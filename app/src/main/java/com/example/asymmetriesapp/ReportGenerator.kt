@@ -99,6 +99,9 @@ class ReportGenerator : AppCompatActivity() {
         when (result) {
             is AnalysisResult.AsymmetryResult -> displayAsymmetryResults(result)
             is AnalysisResult.AngleResult -> displayAngleResults(result)
+            else -> {
+                Log.e(TAG, "Unknown analysis result type")
+            }
         }
     }
 
@@ -157,8 +160,8 @@ class ReportGenerator : AppCompatActivity() {
 
         // Color code based on severity
         val severityColor = when {
-            stats.meanDiff < 5 -> "#4CAF50" // Green - Good
-            stats.meanDiff < 10 -> "#FFC107" // Yellow - Moderate
+            stats.maxDiff < 5 -> "#4CAF50" // Green - Good
+            stats.maxDiff < 10 -> "#FFC107" // Yellow - Moderate
             else -> "#F44336" // Red - High
         }
         cardView.findViewById<TextView>(R.id.tvBodyPart).setTextColor(
@@ -196,15 +199,16 @@ class ReportGenerator : AppCompatActivity() {
 
         val severityColor = if (angleType == "plank_angle") {
             when {
-                stats.meanAngle >= 170 -> "#4CAF50" // Excellent (Green)
-                stats.meanAngle >= 160 -> "#FFC107" // Good (Yellow)
+                stats.meanAngle > 170 -> "#4CAF50" // Excellent (Green)
+                stats.meanAngle > 160 -> "#FFC107" // Good (Yellow)
                 else -> "#F44336" // Needs Improvement (Red)
             }
         } else {
+            // angleType == "squat_angle"
             when {
-                stats.minAngle < 60 || stats.maxAngle > 190 -> "#4CAF50" // Very good (Green)
+                stats.minAngle < 60 || stats.maxAngle > 190 -> "#4CAF50" // Excellent (Green)
                 stats.minAngle <= 90 || stats.maxAngle >= 160 -> "#FFC107" // Good (Yellow)
-                else -> "#F44336" // Bad (Red)
+                else -> "#F44336" // Needs Improvement (Red)
             }
         }
         cardView.findViewById<TextView>(R.id.tvBodyPart).setTextColor(
@@ -220,21 +224,24 @@ class ReportGenerator : AppCompatActivity() {
     ): String {
 
         if (maxAsymmetry == null || stats.isEmpty()) {
-            return "No significant asymmetries detected. Good job!"
+            return "No asymmetries detected. App is not working!"
         }
 
-        val avgAsymmetry = stats.values.map { it.meanDiff }.average()
-
         return buildString {
-            when {
-                avgAsymmetry < 5 -> {
-                    append("Excellent! Your body shows good overall symmetry with minimal imbalances. ")
-                }
-                avgAsymmetry < 10 -> {
-                    append("Good work! Some minor asymmetries detected, which is normal. ")
-                }
-                else -> {
-                    append("Noticeable asymmetries detected. Consider focusing on balanced exercises. ")
+            val maxAsym = stats.values.maxByOrNull { it.meanDiff }?.maxDiff
+            if (maxAsym != null) {
+                when {
+                    maxAsym < 5 -> {
+                        append("Excellent! Your body shows good overall symmetry with minimal imbalances. ")
+                    }
+
+                    maxAsym < 10 -> {
+                        append("Good work! Some minor asymmetries detected, which is normal. ")
+                    }
+
+                    else -> {
+                        append("Noticeable asymmetries detected. Consider focusing on balanced exercises. ")
+                    }
                 }
             }
 

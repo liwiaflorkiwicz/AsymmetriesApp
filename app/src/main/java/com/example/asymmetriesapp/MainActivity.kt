@@ -116,6 +116,15 @@ class MainActivity : AppCompatActivity() {
                 startActivity(intent)
             }
 
+            viewBinding.textViewExerciseName?.text = when (exerciseType) {
+                "POSE" -> "Pose Analysis"
+                "SQUAT" -> "Squat Analysis"
+                "SIDE_SQUAT" -> "Side Squat Analysis"
+                "PLANK" -> "Plank Analysis"
+                "HAND_RISE" -> "Hand Rise Analysis"
+                else -> "Exercise Analysis"
+            }
+
             Log.d(TAG, "onCreate: COMPLETED SUCCESSFULLY")
 
         } catch (e: Exception) {

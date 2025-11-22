@@ -7,4 +7,5 @@
     <string name="max_asym">Max: %.2f %%</string>
     <string name="min_asym">Min: %.2f %%</string>
     <string name="std_asym">Std: %.2f %%</string>
+    <string name="exercise_name">Exercise: </string>
 </resources>
