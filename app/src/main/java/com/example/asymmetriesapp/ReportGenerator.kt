@@ -160,8 +160,8 @@ class ReportGenerator : AppCompatActivity() {
 
         // Color code based on severity
         val severityColor = when {
-            stats.maxDiff < 5 -> "#4CAF50" // Green - Good
-            stats.maxDiff < 10 -> "#FFC107" // Yellow - Moderate
+            stats.meanDiff < 2 -> "#4CAF50" // Green - Good
+            stats.meanDiff < 5 -> "#FFC107" // Yellow - Moderate
             else -> "#F44336" // Red - High
         }
         cardView.findViewById<TextView>(R.id.tvBodyPart).setTextColor(
@@ -199,8 +199,8 @@ class ReportGenerator : AppCompatActivity() {
 
         val severityColor = if (angleType == "plank_angle") {
             when {
-                stats.meanAngle > 170 -> "#4CAF50" // Excellent (Green)
-                stats.meanAngle > 160 -> "#FFC107" // Good (Yellow)
+                stats.meanAngle >= 170 -> "#4CAF50" // Excellent (Green)
+                stats.meanAngle >= 160 -> "#FFC107" // Good (Yellow)
                 else -> "#F44336" // Needs Improvement (Red)
             }
         } else {
@@ -231,11 +231,11 @@ class ReportGenerator : AppCompatActivity() {
             val maxAsym = stats.values.maxByOrNull { it.meanDiff }?.maxDiff
             if (maxAsym != null) {
                 when {
-                    maxAsym < 5 -> {
+                    maxAsym < 2 -> {
                         append("Excellent! Your body shows good overall symmetry with minimal imbalances. ")
                     }
 
-                    maxAsym < 10 -> {
+                    maxAsym < 5 -> {
                         append("Good work! Some minor asymmetries detected, which is normal. ")
                     }
 

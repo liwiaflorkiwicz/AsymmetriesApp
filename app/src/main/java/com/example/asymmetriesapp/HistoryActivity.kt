@@ -97,8 +97,8 @@ class HistoryActivity : AppCompatActivity() {
             val statText = "Avg: ${"%.2f".format(avg)} % • Max: ${"%.2f".format(max)} %"
 
             val (qualityText, color) = when {
-                max < 5.0f -> "Excellent" to Color.parseColor("#4CAF50") // green
-                max < 10.0f -> "Good" to Color.parseColor("#FFC107")     // amber
+                avg < 2.0f -> "Excellent" to Color.parseColor("#4CAF50") // green
+                avg < 5.0f -> "Good" to Color.parseColor("#FFC107")     // amber
                 else -> "Needs Work" to Color.parseColor("#F44336")      // red
             }
             return Triple(statText, qualityText, color)
