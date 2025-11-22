@@ -20,6 +20,10 @@ import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 
+/**
+ * Activity responsible for generating and displaying the analysis report
+ * from a CSV file generated during an exercise session.
+ */
 class ReportGenerator : AppCompatActivity() {
     private lateinit var binding: ReportLayoutBinding
     private var exerciseType: String = "POSE"
@@ -27,12 +31,18 @@ class ReportGenerator : AppCompatActivity() {
     private var videoPath: String = ""
     private var sessionTimestamp: Long = 0L
 
+    /**
+     * Initializes the activity, binds the layout, retrieves data from the intent,
+     * sets up the header, and initiates loading the analysis results.
+     * Input: Bundle? (savedInstanceState)
+     * Output: Unit (Activity initialization)
+     */
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         binding = ReportLayoutBinding.inflate(layoutInflater)
         setContentView(binding.root)
 
-        // Get data from intent
+        // Get report data path, video path, exercise type, and timestamp from the intent.
         reportPath = intent.getStringExtra("REPORT_PATH") ?: ""
         videoPath = intent.getStringExtra("VIDEO_PATH") ?: ""
         exerciseType = intent.getStringExtra("EXERCISE_TYPE") ?: "POSE"
@@ -48,6 +58,7 @@ class ReportGenerator : AppCompatActivity() {
         setupHeader()
 
         binding.btnHistory.setOnClickListener {
+            // Navigate back to HistoryActivity, clearing the activity stack above it
             val intent = Intent(this, HistoryActivity::class.java)
             intent.flags = Intent.FLAG_ACTIVITY_CLEAR_TOP
             startActivity(intent)
@@ -58,6 +69,10 @@ class ReportGenerator : AppCompatActivity() {
         loadAndDisplayResults()
     }
 
+    /**
+     * Sets the report title, exercise type name, and formatted timestamp in the header UI.
+     * Output: Unit (Updates header TextViews)
+     */
     private fun setupHeader() {
         binding.tvReportTitle.text = "Analysis Report"
         binding.tvExerciseType.text = "Exercise: ${getExerciseName(exerciseType)}"
@@ -66,12 +81,18 @@ class ReportGenerator : AppCompatActivity() {
         binding.tvTimestamp.text = dateFormat.format(Date(sessionTimestamp))
     }
 
+    /**
+     * Initiates the asynchronous loading and parsing of the CSV report file.
+     * It runs the heavy CSV parsing on a background thread (Dispatchers.IO).
+     * Output: Unit (Kicks off a coroutine to load/display results)
+     */
     private fun loadAndDisplayResults() {
         lifecycleScope.launch {
             try {
                 val file = File(reportPath)
                 if (!file.exists()) {
                     withContext(Dispatchers.Main) {
+                        // End activity if report file doesn't exist
                         finish()
                     }
                     return@launch
@@ -95,6 +116,11 @@ class ReportGenerator : AppCompatActivity() {
         }
     }
 
+    /**
+     * Directs the flow to the correct display function based on the analysis result type.
+     * Input: AnalysisResult
+     * Output: Unit (Calls displayAsymmetryResults or displayAngleResults)
+     */
     private fun displayResults(result: AnalysisResult) {
         when (result) {
             is AnalysisResult.AsymmetryResult -> displayAsymmetryResults(result)
@@ -105,6 +131,12 @@ class ReportGenerator : AppCompatActivity() {
         }
     }
 
+    /**
+     * Generates and displays feedback and individual result cards for Asymmetry analysis.
+     * Results are displayed in the llResultsContainer.
+     * Input: AnalysisResult.AsymmetryResult (map of body parts to AsymmetryStats)
+     * Output: Unit (Populates UI with asymmetry data)
+     */
     private fun displayAsymmetryResults(result: AnalysisResult.AsymmetryResult) {
         // Generate overall feedback
         val maxAsymmetry = result.stats.values.maxByOrNull { it.meanDiff }
@@ -114,13 +146,19 @@ class ReportGenerator : AppCompatActivity() {
         // Clear previous results
         binding.llResultsContainer.removeAllViews()
 
-        // Add result card for each body part
+        // Add result card for each body part, sorted by descending mean difference (most severe first)
         result.stats.entries.sortedByDescending { it.value.meanDiff }.forEach { (bodyPart, stats) ->
             val cardView = createAsymmetryCard(bodyPart, stats)
             binding.llResultsContainer.addView(cardView)
         }
     }
 
+    /**
+     * Generates and displays feedback and individual result cards for Angle analysis.
+     * Results are displayed in the llResultsContainer.
+     * Input: AnalysisResult.AngleResult (map of angle types to AngleStats)
+     * Output: Unit (Populates UI with angle data)
+     */
     private fun displayAngleResults(result: AnalysisResult.AngleResult) {
         // Generate overall feedback
         val feedback = generateAngleFeedback(result.stats)
@@ -136,6 +174,12 @@ class ReportGenerator : AppCompatActivity() {
         }
     }
 
+    /**
+     * Creates a CardView to display the statistics for a single body part's asymmetry.
+     * Includes color coding based on the severity of the mean difference.
+     * Input: String (bodyPart), AsymmetryStats (stats)
+     * Output: CardView (The populated CardView for asymmetry results)
+     */
     private fun createAsymmetryCard(bodyPart: String, stats: AsymmetryStats): CardView {
         val cardView = LayoutInflater.from(this).inflate(
             R.layout.result_card_layout,
@@ -146,6 +190,7 @@ class ReportGenerator : AppCompatActivity() {
         cardView.findViewById<TextView>(R.id.tvBodyPart).text =
             bodyPart.replaceFirstChar { it.uppercase() }
 
+        // Populate TextViews with formatted statistics
         cardView.findViewById<TextView>(R.id.tvMeanValue).text =
             getString(R.string.avg_asym).format(stats.meanDiff)
 
@@ -158,7 +203,7 @@ class ReportGenerator : AppCompatActivity() {
         cardView.findViewById<TextView>(R.id.tvStdDev).text =
             getString(R.string.std_asym).format(stats.stdDev)
 
-        // Color code based on severity
+        // Color code based on severity of mean difference: Green (<2), Yellow (<5), Red (>=5)
         val severityColor = when {
             stats.meanDiff < 2 -> "#4CAF50" // Green - Good
             stats.meanDiff < 5 -> "#FFC107" // Yellow - Moderate
@@ -171,6 +216,12 @@ class ReportGenerator : AppCompatActivity() {
         return cardView
     }
 
+    /**
+     * Creates a CardView to display the statistics for a single exercise angle.
+     * Includes custom display names and specific logic for hiding mean/stdDev for squat angle.
+     * Input: String (angleType), AngleStats (stats)
+     * Output: CardView (The populated CardView for angle results)
+     */
     private fun createAngleCard(angleType: String, stats: AngleStats): CardView {
         val cardView = LayoutInflater.from(this).inflate(
             R.layout.result_card_layout,
@@ -192,19 +243,21 @@ class ReportGenerator : AppCompatActivity() {
         cardView.findViewById<TextView>(R.id.tvMinValue).text =
             "Min: %.1f°".format(stats.minAngle)
 
+        // Squat analysis only needs min/max angle for range of motion
         if (angleType == "squat_angle") {
             cardView.findViewById<LinearLayout>(R.id.meanRow).visibility = View.GONE
             cardView.findViewById<LinearLayout>(R.id.stdRow).visibility = View.GONE
         }
 
+        // Logic for color coding severity based on angle type
         val severityColor = if (angleType == "plank_angle") {
             when {
-                stats.meanAngle >= 170 -> "#4CAF50" // Excellent (Green)
+                stats.meanAngle >= 170 -> "#4CAF50" // Excellent (Green - straighter body)
                 stats.meanAngle >= 160 -> "#FFC107" // Good (Yellow)
                 else -> "#F44336" // Needs Improvement (Red)
             }
         } else {
-            // angleType == "squat_angle"
+            // angleType == "squat_angle" - criteria for good form is within a range (e.g., 60-190)
             when {
                 stats.minAngle < 60 || stats.maxAngle > 190 -> "#4CAF50" // Excellent (Green)
                 stats.minAngle <= 90 || stats.maxAngle >= 160 -> "#FFC107" // Good (Yellow)
@@ -218,11 +271,15 @@ class ReportGenerator : AppCompatActivity() {
         return cardView
     }
 
+    /**
+     * Generates a summary text feedback for the overall asymmetry results.
+     * Input: Map<String, AsymmetryStats> (stats), AsymmetryStats? (maxAsymmetry)
+     * Output: String (Overall asymmetry feedback)
+     */
     private fun generateAsymmetryFeedback(
         stats: Map<String, AsymmetryStats>,
         maxAsymmetry: AsymmetryStats?
     ): String {
-
         if (maxAsymmetry == null || stats.isEmpty()) {
             return "No asymmetries detected. App is not working!"
         }
@@ -250,6 +307,11 @@ class ReportGenerator : AppCompatActivity() {
         }
     }
 
+    /**
+     * Generates a summary text feedback for the overall angle results.
+     * Input: Map<String, AngleStats> (stats)
+     * Output: String (Overall angle feedback)
+     */
     private fun generateAngleFeedback(stats: Map<String, AngleStats>): String {
         if (stats.isEmpty()) {
             return "No angle data available."
@@ -270,7 +332,7 @@ class ReportGenerator : AppCompatActivity() {
                         when {
                             angleStats.minAngle < 60 || angleStats.maxAngle > 190 ->
                                 append("Very good! Excellent squat form.\n")
-                            angleStats.minAngle < 90 || angleStats.maxAngle > 160 ->
+                            angleStats.minAngle <= 90 || angleStats.maxAngle >= 160 ->
                                 append("Good form! Some room for improvement.\n")
                             else ->
                                 append("Bad form detected. Try improving your squat depth and stability.\n")
@@ -288,6 +350,9 @@ class ReportGenerator : AppCompatActivity() {
         }
     }
 
+    /**
+     * Converts the internal exercise type string to a more user-friendly name.
+     */
     private fun getExerciseName(type: String): String {
         return when (type) {
             "POSE" -> "Standing Pose"
@@ -302,6 +367,12 @@ class ReportGenerator : AppCompatActivity() {
     companion object {
         private const val TAG = "ReportGenerator"
 
+        /**
+         * Reads the CSV file and delegates to the appropriate analysis function
+         * (asymmetry or angle) based on the exercise type.
+         * Input: File (CSV file), String (exerciseType)
+         * Output: AnalysisResult (Sealed class containing either AsymmetryResult or AngleResult)
+         */
         fun parseCSVData(file: File, exerciseType: String): AnalysisResult {
             val lines = file.readLines()
             if (lines.size < 2) {
@@ -323,6 +394,12 @@ class ReportGenerator : AppCompatActivity() {
             }
         }
 
+        /**
+         * Processes CSV data to calculate asymmetry statistics for multiple body parts.
+         * Asymmetry is measured by height difference columns (e.g., shoulder_height_diff).
+         * Input: List<String> (header), List<String> (dataLines)
+         * Output: AnalysisResult (AsymmetryResult with calculated stats)
+         */
         private fun analyzeAsymmetryData(header: List<String>, dataLines: List<String>): AnalysisResult {
             val bodyParts = listOf("shoulder", "hip", "knee", "ankle", "elbow", "ear")
             val asymmetryStats = mutableMapOf<String, AsymmetryStats>()
@@ -338,6 +415,7 @@ class ReportGenerator : AppCompatActivity() {
                         val columns = line.split(",")
                         if (columnIndex < columns.size) {
                             val value = columns[columnIndex]
+                            // Only add valid float values, skipping "NaN" or blank entries
                             if (value != "NaN" && value.isNotBlank()) {
                                 values.add(value.toFloatOrNull() ?: 0f)
                             }
@@ -364,6 +442,11 @@ class ReportGenerator : AppCompatActivity() {
             return AnalysisResult.AsymmetryResult(asymmetryStats)
         }
 
+        /**
+         * Processes CSV data to calculate angle statistics for specific exercise angles.
+         * Input: List<String> (header), List<String> (dataLines), String (exerciseType)
+         * Output: AnalysisResult (AngleResult with calculated stats)
+         */
         private fun analyzeAngleData(header: List<String>, dataLines: List<String>, exerciseType: String): AnalysisResult {
             val angleTypes = when (exerciseType) {
                 "SIDE_SQUAT" -> listOf("squat_angle")
@@ -383,6 +466,7 @@ class ReportGenerator : AppCompatActivity() {
                         val columns = line.split(",")
                         if (columnIndex < columns.size) {
                             val value = columns[columnIndex]
+                            // Only add valid float values, skipping "NaN" or blank entries
                             if (value != "NaN" && value.isNotBlank()) {
                                 values.add(value.toFloatOrNull() ?: 0f)
                             }
@@ -410,8 +494,14 @@ class ReportGenerator : AppCompatActivity() {
             return AnalysisResult.AngleResult(angleStats)
         }
 
+        /**
+         * Calculates the standard deviation of a list of float values.
+         * Input: List<Float> (values), Float (mean)
+         * Output: Float (Standard deviation)
+         */
         private fun calculateStdDev(values: List<Float>, mean: Float): Float {
             if (values.size < 2) return 0f
+            // Standard deviation formula: sqrt( sum((x_i - mean)^2) / N )
             val variance = values.map { (it - mean) * (it - mean) }.average()
             return kotlin.math.sqrt(variance).toFloat()
         }
@@ -424,6 +514,7 @@ sealed class AnalysisResult {
     data class AngleResult(val stats: Map<String, AngleStats>) : AnalysisResult()
 }
 
+// Data class to hold calculated statistics for a body part's asymmetry
 data class AsymmetryStats(
     val bodyPart: String,
     val meanDiff: Float,
@@ -433,6 +524,7 @@ data class AsymmetryStats(
     val sampleCount: Int
 )
 
+// Data class to hold calculated statistics for an exercise angle
 data class AngleStats(
     val angleType: String,
     val meanAngle: Float,
@@ -441,4 +533,3 @@ data class AngleStats(
     val stdDev: Float,
     val sampleCount: Int
 )
-
