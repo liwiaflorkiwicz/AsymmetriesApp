@@ -1,0 +1,11 @@
+<resources>
+    <string name="app_name">AsymmetriesApp</string>
+    <string name="body_asymmetry_analysis">Body Asymmetry Analysis</string>
+    <string name="asymmetry_app">Asymmetry App accurately measures body asymmetry and joint angles using computer vision,
+        helping users track posture, balance, and movement with precise, data-driven insights.</string>
+    <string name="avg_asym">Avg: %.2f %%</string>
+    <string name="max_asym">Max: %.2f %%</string>
+    <string name="min_asym">Min: %.2f %%</string>
+    <string name="std_asym">Std: %.2f %%</string>
+    <string name="exercise_name">Exercise: </string>
+</resources>
