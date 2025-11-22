@@ -380,7 +380,7 @@ class MainActivity : AppCompatActivity() {
                 avgAsymmetry = avgAsymmetry,
                 maxAsymmetry = maxAsymmetry,
                 avgAngle = minAngle,
-                maxAngle = maxAngle // NOTE: Using maxAngle for minAngle here seems intentional based on the previous context but is potentially confusing
+                maxAngle = maxAngle
             )
         }
 
